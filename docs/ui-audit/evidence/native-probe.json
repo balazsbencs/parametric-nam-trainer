@@ -1,0 +1,124 @@
+{
+  "startup_to_first_frame_seconds": 7.261,
+  "tabs": [
+    "Project",
+    "Knobs",
+    "Plan",
+    "Audio I/O",
+    "Capture",
+    "Train on Mac",
+    "Pedal setup"
+  ],
+  "controls": {
+    "device": {
+      "accessible_name": "Automatic \u00b7 Apple GPU when available",
+      "role": "Role.ComboBox",
+      "enabled_without_project": true
+    },
+    "epochs": {
+      "accessible_name": "Epochs",
+      "role": "Role.SpinBox",
+      "enabled_without_project": true
+    },
+    "batch": {
+      "accessible_name": "Batch size",
+      "role": "Role.SpinBox",
+      "enabled_without_project": true
+    },
+    "start_training": {
+      "accessible_name": "Start training",
+      "role": "Role.Button",
+      "enabled_without_project": true
+    }
+  },
+  "window_sizes": [
+    {
+      "tab": "project",
+      "requested": [
+        1050,
+        740
+      ],
+      "actual": [
+        1050,
+        740
+      ]
+    },
+    {
+      "tab": "capture",
+      "requested": [
+        1050,
+        740
+      ],
+      "actual": [
+        1050,
+        740
+      ]
+    },
+    {
+      "tab": "train",
+      "requested": [
+        1050,
+        740
+      ],
+      "actual": [
+        1050,
+        740
+      ]
+    },
+    {
+      "tab": "setup",
+      "requested": [
+        1050,
+        740
+      ],
+      "actual": [
+        1050,
+        740
+      ]
+    },
+    {
+      "tab": "project",
+      "requested": [
+        720,
+        640
+      ],
+      "actual": [
+        778,
+        640
+      ]
+    },
+    {
+      "tab": "capture",
+      "requested": [
+        720,
+        640
+      ],
+      "actual": [
+        778,
+        640
+      ]
+    },
+    {
+      "tab": "train",
+      "requested": [
+        720,
+        640
+      ],
+      "actual": [
+        778,
+        640
+      ]
+    },
+    {
+      "tab": "setup",
+      "requested": [
+        720,
+        640
+      ],
+      "actual": [
+        778,
+        640
+      ]
+    }
+  ]
+}

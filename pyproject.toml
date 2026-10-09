@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parametric-mac"
+version = "0.1.0"
+description = "A Mac companion for guided parametric NAM pedal capture and training"
+requires-python = ">=3.11,<3.14"
+dependencies = ["numpy>=1.26,<3", "soundfile>=0.12,<1", "PySide6>=6.7,<7"]
+
+[project.scripts]
+parametric = "parametric_mac.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["parametric_mac*"]

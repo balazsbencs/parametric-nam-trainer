@@ -1,0 +1,181 @@
+{
+  "screens": [
+    {
+      "stage": "connect",
+      "viewport": [
+        1440,
+        1080
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "plan",
+      "viewport": [
+        1440,
+        1080
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "capture",
+      "viewport": [
+        1440,
+        1080
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "train",
+      "viewport": [
+        1440,
+        1080
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "review",
+      "viewport": [
+        1440,
+        1080
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "connect",
+      "viewport": [
+        960,
+        900
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "plan",
+      "viewport": [
+        960,
+        900
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "capture",
+      "viewport": [
+        960,
+        900
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "train",
+      "viewport": [
+        960,
+        900
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "review",
+      "viewport": [
+        960,
+        900
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "connect",
+      "viewport": [
+        720,
+        1000
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "plan",
+      "viewport": [
+        720,
+        1000
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "capture",
+      "viewport": [
+        720,
+        1000
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "train",
+      "viewport": [
+        720,
+        1000
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "review",
+      "viewport": [
+        720,
+        1000
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "connect",
+      "viewport": [
+        390,
+        844
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "plan",
+      "viewport": [
+        390,
+        844
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "capture",
+      "viewport": [
+        390,
+        844
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "train",
+      "viewport": [
+        390,
+        844
+      ],
+      "horizontal_overflow": false
+    },
+    {
+      "stage": "review",
+      "viewport": [
+        390,
+        844
+      ],
+      "horizontal_overflow": false
+    }
+  ],
+  "interactions": [
+    "setup readiness gates route check and plan",
+    "cancelled take preserves saved count and setting",
+    "accepted take advances one setting and clears ready confirmation",
+    "clipped take stays on same target without accepting it",
+    "example training continues across stage navigation and ends at review",
+    "listening checks and A/B selection survive re-render and stage navigation",
+    "review requires all checks; download is labeled non-model example",
+    "GPU error has a CPU recovery action without recapture",
+    "quick test is successful setup state with full-training next step, not a reviewed model",
+    "training chart only shows past epochs and selected preset total",
+    "range/increment edits persist, change targets, retain focus and recover from invalid input",
+    "routing edits persist and invalidate earlier route check",
+    "gain adjustment starts separate calibration with zero new takes and preserves earlier session identity",
+    "offline file URL loads complete interactive mockup without server"
+  ],
+  "console_errors": []
+}

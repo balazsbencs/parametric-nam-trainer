@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parametric — interactive UX mockups</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="prototype-bar">
+  <a class="prototype-brand" href="overview.html">Parametric <span>UX study</span></a>
+  <span class="prototype-disclosure">Interactive mockup · all measurements are examples</span>
+  <div class="prototype-tools"><button id="reset-demo" class="text-button">Reset demo</button><a href="overview.html">Full overview <span aria-hidden="true">↗</span></a></div>
+</header>
+<div class="app-window">
+  <div class="titlebar"><div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div><span>Parametric</span><span class="titlebar-project">Drive pedal study</span><span class="save-indicator">Example session</span></div>
+  <div class="app-body">
+    <aside class="sidebar">
+      <div class="project-heading"><span class="project-symbol" aria-hidden="true"></span><div><strong>Drive pedal study</strong><span>Drive + Tone · mono</span></div></div>
+      <nav aria-label="Capture workflow" id="workflow-nav"></nav>
+      <div class="sidebar-note"><strong>A model with real controls.</strong><p>Record several knob settings.<br>Train one controllable model.</p></div>
+      <div class="sidebar-footer"><span class="device-dot"></span><div><strong>UMC22</strong><span id="sidebar-device">Example device · 48 kHz</span></div><button class="icon-button" data-nav="connect" aria-label="Open audio setup" id="setup-icon"></button></div>
+    </aside>
+    <main id="main" tabindex="-1" aria-label="Workflow stage"></main>
+  </div>
+  <footer class="statusbar"><span id="session-status">Example session · no hardware is connected by this prototype</span><span>Local on your Mac</span></footer>
+</div>
+<div class="prototype-caption"><span id="screen-purpose"></span><span>Try the controls. Changes stay in this mockup.</span></div>
+<div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>

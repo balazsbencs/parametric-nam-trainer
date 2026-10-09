@@ -1,0 +1,11 @@
+.venv/
+.upstream/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.DS_Store
+projects/
+inputs/
+dist/
+.impeccable/hook.cache.json
+.impeccable/config.local.json
