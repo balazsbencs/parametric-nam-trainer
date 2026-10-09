@@ -35,7 +35,7 @@ def doctor():
                 print(f"MPS smoke check failed: {exc}; select CPU.")
     try:
         import sounddevice as sd
-        print("Audio devices (verify input/output channel counts in Audio I/O):")
+        print("Audio devices (verify input/output channel counts in Connect):")
         print(sd.query_devices())
     except Exception as exc:
         print(f"Audio device enumeration unavailable: {exc}")

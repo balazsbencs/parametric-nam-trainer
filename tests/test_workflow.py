@@ -110,6 +110,9 @@ def test_actual_one_epoch_export(project):
     assert len(artifact['weights']) > 0
     assert np.isfinite(artifact['weights']).all()
     assert read_json(out / 'status.json')['status'] == 'exported'
+    metrics = read_json(out / 'metrics.json')
+    assert metrics['epoch'] == 1
+    assert metrics['ESR'] >= 0
 
 
 def test_delay_is_applied_after_the_window(project):

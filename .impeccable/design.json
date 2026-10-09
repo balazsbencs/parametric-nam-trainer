@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-09T19:36:56.964958+00:00",
+  "title": "Design System: Parametric native desktop",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Action Blue"
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Working Paper"
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "Quiet Sidebar"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Utility Ink"
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Supporting Gray"
+      },
+      "caution": {
+        "role": "status",
+        "displayName": "Readable Caution"
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Stage headline",
+        "purpose": "Current task title."
+      },
+      "section": {
+        "displayName": "Section and status",
+        "purpose": "Form groups, project header and saved counts."
+      },
+      "body": {
+        "displayName": "Native body",
+        "purpose": "Wrapping instructions and standard controls."
+      },
+      "quality": {
+        "displayName": "Coverage choice",
+        "purpose": "Selected quality or Custom capture plan."
+      },
+      "dial-value": {
+        "displayName": "Physical position",
+        "purpose": "QPainter numerical target; QFont.setBold(True)."
+      },
+      "stop-label": {
+        "displayName": "Coverage stops",
+        "purpose": "Painted five-stop names and hints."
+      }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": [],
+    "native": {
+      "platform": "macOS desktop",
+      "toolkit": "PySide6 / Qt",
+      "sourceFiles": [
+        "parametric_mac/gui.py",
+        "parametric_mac/workflow.py",
+        "parametric_mac/training.py"
+      ],
+      "tokenSource": "DESIGN.md frontmatter, extracted from current QSS and QPainter code.",
+      "fontFamily": "QApplication default system font; no family override or bundled font.",
+      "focus": {
+        "source": "STYLE",
+        "treatment": "2px primary-color outline on buttons, text/number fields, selectors and slider."
+      },
+      "coverageTrack": {
+        "source": "STYLE QSlider::groove:horizontal",
+        "treatment": "Horizontal gradient using coverage-low, coverage-balanced and coverage-high frontmatter tokens."
+      },
+      "previewPolicy": "Native Qt components have no fabricated HTML/CSS previews. Inspect source and actual screenshots.",
+      "tonalRampPolicy": "No tonal ramps invented; only implemented palette primitives are normative.",
+      "evidence": ".impeccable/review/native/evidence.json",
+      "evidencePlatform": "Linux Qt offscreen, not macOS",
+      "verifiedScreenshotSizes": [
+        [
+          1140,
+          900
+        ],
+        [
+          800,
+          680
+        ]
+      ],
+      "window": {
+        "initialSize": [
+          1140,
+          840
+        ],
+        "minimumSize": [
+          760,
+          580
+        ],
+        "sidebarWidth": 172,
+        "behavior": "Persistent sidebar; independently scrolling pages and pinned stage actions."
+      },
+      "limitations": [
+        "Mac installation",
+        "CoreAudio hardware recording",
+        "Full MPS training",
+        "Real-pedal model accuracy",
+        "Mac VoiceOver"
+      ]
+    }
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main enabled task, with explicit disabled and focus states.",
+      "source": "parametric_mac/gui.py"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Native bordered secondary action or checkable disclosure.",
+      "source": "parametric_mac/gui.py"
+    },
+    {
+      "name": "Labeled native field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Native line edit, selector or number field; labeled and keyboard accessible.",
+      "source": "parametric_mac/gui.py"
+    },
+    {
+      "name": "Stage navigation",
+      "kind": "nav",
+      "refersTo": "navigation-current",
+      "description": "Persistent five-stage native sidebar; remains available during jobs.",
+      "source": "parametric_mac/gui.py"
+    },
+    {
+      "name": "Details and logs",
+      "kind": "custom",
+      "refersTo": "detail-view",
+      "description": "Native table or read-only log, usually behind a disclosure.",
+      "source": "parametric_mac/gui.py"
+    },
+    {
+      "name": "Capture coverage",
+      "kind": "custom",
+      "description": "Five-stop native slider; Good default, Custom manual edits, sticky recorded-plan lock.",
+      "source": "parametric_mac/gui.py"
+    },
+    {
+      "name": "Physical knob targets",
+      "kind": "custom",
+      "description": "Read-only QPainter dial instructions with accessible text and native confirmation checkbox.",
+      "source": "parametric_mac/gui.py"
+    }
+  ],
+  "narrative": {
+    "northStar": "Your pedal, captured.",
+    "overview": "The approved direction is a familiar light desktop utility: quiet working surfaces, blue actions, compact task labels and explicit state messages. Its signature is a read-only physical dial target paired with a numerical position and confirmation before recording. The interface makes the next physical task and its saved progress easy to find.\n\nThis document refreshes the earlier native-tab guidance after approval to implement the five-stage proposal and quality slider. It records the built Python/Qt interface in `parametric_mac/gui.py`; the historical [mockup design](docs/mockups/DESIGN.md) and [Plan proposal](docs/mockups/plan-quality.md) remain approved interaction references. Browser font, framing, breakpoints and synthetic metrics are not production tokens. Qt code remains the source of truth for these extracted values.",
+    "keyCharacteristics": [
+      "Five persistent stages: Connect, Plan, Capture, Train and Review.",
+      "One initial capture-coverage decision; technical controls start collapsed.",
+      "Physical targets, readiness, saved progress and recovery carry the task.",
+      "Real run data and a compatible-player handoff keep review honest."
+    ],
+    "rules": [
+      {
+        "name": "The State Meaning Rule",
+        "body": "Explain readiness and recovery in text; color alone must not imply successful recording, finished sound quality or completed listening.",
+        "section": "colors"
+      },
+      {
+        "name": "The Pinned Handoff Rule",
+        "body": "Keep the stage's next action outside its scrolling content and show why it is unavailable.",
+        "section": "layout"
+      }
+    ],
+    "dos": [
+      "**Do** preserve native Qt control semantics and visible keyboard focus.",
+      "**Do** keep physical targets, readiness and the next action easy to find.",
+      "**Do** explain locked or unavailable actions with a concrete next step.",
+      "**Do** derive counts, progress and review metrics from saved application data.",
+      "**Do** retain separate projects and source files when capture settings change."
+    ],
+    "donts": [
+      "**Don't** interpret capture coverage as a guaranteed sound-quality rating.",
+      "**Don't** make the physical dial diagram appear interactive or automatic.",
+      "**Don't** copy browser font loading, phone breakpoints or example metrics into native truth.",
+      "**Don't** imply a completed export has been listened to or validated on real hardware.",
+      "**Don't** infer Mac/CoreAudio/MPS/VoiceOver verification from Linux offscreen screenshots."
+    ]
+  }
+}

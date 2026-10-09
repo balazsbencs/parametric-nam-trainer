@@ -1,25 +1,90 @@
 # Parametric pedal capture for Mac
 
-A local companion for capturing a pedal at multiple knob settings and training one controllable NAM model. Built around the public [parametric NAM fork](https://github.com/phillipmself/neural-amp-modeler-parametric), pinned to a reviewed revision. Includes a native capture app with a **Train on Mac** tab, preflight checks, and instructions for your **UMC22**.
+Capture a pedal at multiple knob settings and train one controllable NAM model locally on an Apple Silicon Mac. The native app guides you through **Connect → Plan → Capture → Train → Review**, using the public [parametric NAM trainer](https://github.com/phillipmself/neural-amp-modeler-parametric) at a pinned revision.
 
-## Start on Apple Silicon
+Plan has one capture-quality slider, with **Good** recommended. The app sets recording counts and knob steps automatically, shows the actual recording effort, and keeps technical settings under Advanced. Quality means capture coverage, not guaranteed sound quality.
 
-Move the source ZIP to your Mac and unzip it first. It excludes this development workspace's Linux environment; the installer creates a fresh Mac environment.
+![Native Plan screen, rendered on Linux](docs/screenshots/native/plan-desktop.png)
 
-Install native Python **3.12** from [python.org](https://www.python.org/downloads/macos/) (includes Tk) and Xcode Command Line Tools (`xcode-select --install`) if Git is unavailable. Use Python 3.11–3.13, with Rosetta disabled.
+## Install on an Apple Silicon Mac
 
-1. Double-click **Install.command**. It creates an isolated `.venv`, installs the pinned trainer from source, and downloads checksum-verified training signals. Network access is needed; the ML dependencies are a substantial download.
-2. Read [the UMC22 pedal wiring guide](docs/hardware-umc22.md) and connect your reamp box and pedal.
-3. Double-click **Capture.command**. Create a project, choose the two files in `inputs/`, define continuous knobs and generate a capture plan. Set up Audio I/O and run Route test. Record the prompted positions.
-4. In **Train on Mac**, check captures and try one epoch. Then run a longer training job. **Train.command** opens the same app on that tab; open your project in Project first.
-5. **Open outputs** reveals separate run folders. Load `model_parametric.nam` in the matching [NamParametricPlugin](https://github.com/phillipmself/NamParametricPlugin), then listen and evaluate unseen settings. The stock NAM plugin cannot play this parametric architecture.
+You need an Apple Silicon Mac, an internet connection for installation, and native **Python 3.12** from [python.org](https://www.python.org/downloads/macos/). Python 3.11–3.13 is supported. Keep Rosetta disabled for Terminal; the installer checks for `arm64`. Python.org includes Tk, which the upstream trainer needs.
 
-The first workflow supports continuous knobs. Keep switches fixed per project. Start with an overdrive/distortion/EQ pedal; modulation and delay are outside the initial capture protocol.
+1. Download [this repository as a ZIP](https://github.com/balazsbencs/parametric-nam-trainer/archive/refs/heads/main.zip), unzip it, and move the folder somewhere permanent, such as `~/Projects/parametric-nam-trainer`. Do not run commands from inside the ZIP.
+2. Open Terminal and install Apple's command line tools if needed:
+
+   ```sh
+   xcode-select --install
+   ```
+
+   Finish the installation dialog before continuing. If the tools are already installed, skip this step.
+3. In Terminal, type `cd `, drag the unzipped project folder into the window, and press Return. Then run:
+
+   ```sh
+   chmod +x Install.command Capture.command Train.command
+   ./Install.command
+   ```
+
+   The installer creates a local `.venv`, checks out the pinned trainer into `.upstream`, installs dependencies and downloads verified excitation signals into `inputs/`. The ML dependencies are a substantial download. Wait for **Installed. Open Capture.command to begin.**
+4. Launch the app:
+
+   ```sh
+   ./Capture.command
+   ```
+
+   You can also double-click **Capture.command** in Finder after installation. **Train.command** opens the same app on Train; open your project using the header button.
+
+If the installer selects an older system Python, specify the installed Python explicitly:
+
+```sh
+PARAMETRIC_PYTHON=/Library/Frameworks/Python.framework/Versions/3.12/bin/python3 ./Install.command
+```
+
+For a Git checkout instead of a ZIP:
+
+```sh
+git clone https://github.com/balazsbencs/parametric-nam-trainer.git
+cd parametric-nam-trainer
+./Install.command
+./Capture.command
+```
+
+## Your first pedal capture with a UMC22
+
+You can explore the app before connecting hardware. **Recording needs a reamp box**, cables, your pedal and its correct power supply. Start with an overdrive, distortion or EQ pedal. Keep switches fixed; use separate projects for different switch positions. Delay and modulation pedals are outside this initial capture protocol.
+
+1. **Connect.** Enter the pedal name and knobs to reproduce, such as `Drive, Tone`. Note the controls you will keep fixed, such as Level at 5. Click **New project** and choose an empty folder. The app copies the two verified excitation files automatically. Wire **OUTPUT L → reamp box → pedal input**, then **pedal output → MIC/LINE 1 using its ¼-inch jack**. Turn Direct Monitor and DAW monitoring off, disconnect speakers from capture outputs, and set the UMC22 to **48 kHz** in Audio MIDI Setup. Start levels low, check the loudest pedal setting for headroom, then keep interface and reamp levels fixed. Select the UMC22 and confirm the setup checkboxes before **Test connection**. Follow the detailed [hardware guide](docs/hardware-umc22.md), including the optional clean timing loopback.
+2. **Plan.** Leave **Good** selected for a balanced start, or choose **Quick test** to check your setup with fewer recordings. The slider updates all modeled knob steps and sampling counts. Defaults assume a 0–10 dial; if your pedal uses another range, set it in **Advanced capture settings**. Physical ranges and fixed controls remain unchanged when you move the slider. Recording time includes an allowance for turning knobs; training time is separate. Click **Start capturing**.
+3. **Capture.** Turn the real knobs to the large displayed positions, confirm they match, then click **Record this setting**. Each accepted take is saved. The queue and detailed QA are under **Queue and recording details**; select a row to rerecord its exact setting. After the first accepted take, quality and knob labels are locked. Use **Create a separate project** to change the plan or calibrated levels. Reopening a project requires a fresh connection test before recording.
+4. **Train.** Once the plan is recorded, click **Check recordings**. Try **Quick workflow test · 1 epoch** first, then **Full training · 200 epochs**. Automatic device selection uses the Apple GPU when available, otherwise CPU. Progress and validation metrics come from the real trainer. You can browse other stages while it runs; controls that could change its inputs are disabled. If GPU or memory errors occur, open the log and use **Retry on CPU**, which also reduces batch size to 1.
+5. **Review.** Choose a saved run and inspect its status and last logged validation ESR. That metric describes the last epoch, not a fresh evaluation of the exported checkpoint. **Save model…** copies the actual `model_parametric.nam`. Load it in [NamParametricPlugin](https://github.com/phillipmself/NamParametricPlugin); the stock NAM player cannot load this architecture. Compare it with the saved `val_lhs_*.wav` test recordings and try unseen knob positions. Listening status is saved per run. This version has no built-in A/B audio player.
+
+Your project folder contains `capture_project.json`, `workflow.json`, input WAVs, captures and separate `outputs/` run folders. Keep the whole folder when moving or archiving a project. Use one app window per project while recording or training. Training reads existing WAVs and saves hashes; it does not duplicate them into each run. Closing while a job runs requires stopping/cancelling and waiting first. Interrupted or failed run folders are retained; inspect them before assuming a model was exported.
+
+## Troubleshooting on Mac
+
+| Problem | What to do |
+| --- | --- |
+| Python version or architecture error | Install native Python 3.12; use the explicit `PARAMETRIC_PYTHON` command above. Confirm Terminal is running without Rosetta. |
+| Finder will not open a `.command` file | Launch it from Terminal using `./Capture.command`. For a downloaded file blocked by macOS, use the normal Finder/Open or Privacy & Security flow if you trust the source. |
+| No interface or no input | Connect the UMC22, refresh interfaces and select it in Connect. Allow microphone access for the launching app, usually Terminal or Python, in System Settings → Privacy & Security → Microphone. |
+| Sample-rate warning | Set the UMC22 to 48 kHz in Audio MIDI Setup, then refresh interfaces and test again. |
+| Loopback not detected | Check the optional cable and channels, or disable the optional loopback if you have not wired it. It is off by default. |
+| Silence, clipping or timing QA warnings | Read recording details and the hardware guide. Correct the route; if gain calibration changes, begin a separate project rather than mixing levels. |
+| GPU or memory failure | Use Retry on CPU, or reduce Batch size under Advanced training settings. The original recordings are retained. |
+| Existing `.venv` or `.upstream` rejected by installer | Rename the conflicting directory and rerun. The installer preserves environments of the wrong architecture and trainer checkouts with edits. |
+
+To inspect dependencies and the Apple GPU:
+
+```sh
+.venv/bin/parametric doctor
+```
+
+The doctor exercises an MPS convolution/backprop operation, not a complete model benchmark. macOS installation, CoreAudio recording and full MPS training still need validation on your actual Mac and pedal; development verification here used Linux and synthetic audio.
 
 ## Terminal controls
 
 ```sh
-.venv/bin/parametric doctor
 .venv/bin/parametric inputs ./inputs
 .venv/bin/parametric capture
 .venv/bin/parametric check "/path/to/pedal project"
@@ -28,28 +93,23 @@ The first workflow supports continuous knobs. Keep switches fixed per project. S
 .venv/bin/parametric train "/path/to/pedal project" --device cpu --epochs 200 --batch 1
 ```
 
-`--dry-run` runs preflight and saves run configs without training. Automatic device selection chooses MPS when available, otherwise CPU. GPU errors stay visible; retry on CPU or lower batch size. The execution profile uses float32, no `torch.compile`, and no worker processes. Training rebuilds configs from the current saved capture project so an old export cannot omit newer captures.
+`--dry-run` performs preflight and saves run configs without training. Training rebuilds configs from the latest saved capture project. The Mac execution profile uses float32, no `torch.compile`, and no worker processes. Stop allows a graceful interrupt, with a 15-second forced-stop limit; checkpoint resuming is not exposed in this version.
 
-Preflight checks missing/mono/mismatched audio, digital full-scale peaks, silence, non-finite values, control labels, windows, capture QA and overlap between train/validation settings. It does not independently measure converter calibration, prove that timing is correct, or detect every analog clipping/dropout artifact. Use the native route/capture QA and listen too.
+Preflight checks missing/mono/mismatched audio, digital full-scale peaks, silence, non-finite values, control labels, windows, capture QA and overlapping train/test settings. It does not prove converter calibration or detect every analog clipping artifact. Route QA and listening remain necessary.
 
-Each run saves data/model/learning configs, an environment manifest, trainer outputs and status. Failed runs retain their folders. WAVs and the capture project are not rewritten by training. Stop allows a graceful interrupt and export if possible, with a 15-second forced-stop limit; inspect outputs rather than assuming a stopped run is complete. Resuming checkpoints is not exposed in this version.
+## Research, design and validation
 
-## Research and hardware
+- [Parametric modeling research and source notes](docs/research.md)
+- [UMC22 wiring and capture instructions](docs/hardware-umc22.md)
+- [Verification and remaining Mac hardware checks](docs/validation.md)
+- [Original UI audit](docs/ui-audit/report.md)
+- [Approved workflow mockups](docs/mockups/overview.html) · [clickable prototype](docs/mockups/index.html)
 
-- [How parametric modeling works, source notes and limitations](docs/research.md)
-- [UMC22 wiring, equipment and capture instructions](docs/hardware-umc22.md)
-- [Validation performed and Mac hardware checks still needed](docs/validation.md)
-- [UI audit and prioritized UX findings](docs/ui-audit/report.md)
-- [Full workflow mockup overview](docs/mockups/overview.html) and [clickable prototype](docs/mockups/index.html)
-
-The mockups open locally in a browser and use example data. They demonstrate the proposed Connect → Plan → Capture → Train → Review journey; physical audio and training still run through the native application.
-The proposed Plan screen uses one quality slider with **Good** selected by default; detailed knob and sampling controls stay under Advanced. These presets are illustrative capture coverage, not measured sound-quality guarantees.
-
-This is a source-based first version, not a signed standalone Mac installer or a new plugin runtime. The original ParametricOD article does not publish its full recipe. We use the public fork's actual capture and training machinery, with a Mac companion layer.
+The mockups use example data; the five-stage workflow is now implemented in the native Qt app. This is a source-based app, not a signed standalone Mac installer or a new plugin runtime. The original ParametricOD article does not publish its complete recipe; this tool uses the public fork's capture and training machinery.
 
 ## Development
 
-On Linux, native GUI imports also need system Tk and PortAudio libraries. For CPU-only validation install a CPU PyTorch wheel before the trainer to avoid unnecessary CUDA dependencies:
+On Linux, native imports need system Tk and PortAudio. For CPU-only validation, install a CPU PyTorch wheel before the trainer:
 
 ```sh
 python3 -m venv .venv
@@ -60,4 +120,4 @@ git -C .upstream checkout a3684411076be69dab53505df14922487697f2cf
 .venv/bin/python -m pytest
 ```
 
-Editable installation is deliberate because the fork's inspected wheel package list omits its capture package. The trainer revision is pinned; transitive dependencies are constrained by their packages but not fully locked. Re-run validation before updating dependencies or upstream code. Synthetic tests prove integration, not pedal accuracy.
+Editable installation is deliberate: the inspected upstream wheel package list omits its capture package. The trainer is pinned; transitive dependencies are not fully locked. Revalidate before updating either. Synthetic tests prove integration, not pedal accuracy.

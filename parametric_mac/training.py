@@ -116,10 +116,18 @@ def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False):
 
         def on_train_epoch_end(self, trainer, module):
             metrics = []
+            saved_metrics = {"epoch": trainer.current_epoch + 1}
             for key in ("ESR", "MSE", "val_loss"):
                 value = trainer.callback_metrics.get(key)
                 if value is not None:
-                    metrics.append(f"{key}={float(value.detach().cpu()) if hasattr(value, 'detach') else float(value):.6g}")
+                    number = float(value.detach().cpu()) if hasattr(value, 'detach') else float(value)
+                    metrics.append(f"{key}={number:.6g}")
+                    # JSON has no infinity/NaN; preserve only meaningful measurements.
+                    import math
+                    if math.isfinite(number):
+                        saved_metrics[key] = number
+            from nam.capture.project import atomic_write_json
+            atomic_write_json(out / "metrics.json", saved_metrics)
             print(f"Epoch {trainer.current_epoch + 1} finished. " + ", ".join(metrics), flush=True)
 
     class Tee:

@@ -1,0 +1,36 @@
+{
+  "platform": "Linux Qt offscreen, not macOS",
+  "pending_capture_project": "/tmp/parametric-native-evidence-lpu68bg3",
+  "real_synthetic_training_project": "/tmp/pytest-of-bbalazs/pytest-11/test_latest_capture_project_ov0",
+  "viewports": {
+    "desktop": [
+      1140,
+      900
+    ],
+    "compact": [
+      800,
+      680
+    ]
+  },
+  "screenshots": [
+    ".impeccable/review/native/connect-desktop.png",
+    ".impeccable/review/native/plan-desktop.png",
+    ".impeccable/review/native/capture-desktop.png",
+    ".impeccable/review/native/train-desktop.png",
+    ".impeccable/review/native/review-desktop.png",
+    ".impeccable/review/native/connect-compact.png",
+    ".impeccable/review/native/plan-compact.png",
+    ".impeccable/review/native/capture-compact.png",
+    ".impeccable/review/native/train-compact.png",
+    ".impeccable/review/native/review-compact.png"
+  ],
+  "additional_states": [
+    "check-running-desktop.png",
+    "train-error-desktop.png",
+    "plan-advanced-compact.png",
+    "plan-quick-desktop.png",
+    "plan-overkill-desktop.png",
+    "plan-locked-desktop.png"
+  ],
+  "recordings_performed": false
+}
