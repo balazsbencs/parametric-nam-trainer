@@ -43,6 +43,7 @@ Each run saves data/model/learning configs, an environment manifest, trainer out
 - [Full workflow mockup overview](docs/mockups/overview.html) and [clickable prototype](docs/mockups/index.html)
 
 The mockups open locally in a browser and use example data. They demonstrate the proposed Connect → Plan → Capture → Train → Review journey; physical audio and training still run through the native application.
+The proposed Plan screen uses one quality slider with **Good** selected by default; detailed knob and sampling controls stay under Advanced. These presets are illustrative capture coverage, not measured sound-quality guarantees.
 
 This is a source-based first version, not a signed standalone Mac installer or a new plugin runtime. The original ParametricOD article does not publish its full recipe. We use the public fork's actual capture and training machinery, with a Mac companion layer.
 

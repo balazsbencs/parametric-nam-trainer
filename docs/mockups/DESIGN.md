@@ -84,6 +84,8 @@ This document applies only to [the HTML interaction proposal](index.html) and [i
 
 The proposal uses a familiar light desktop utility appearance: quiet surfaces, blue actions, compact labels and clear state messages. Its reusable signature is the large physical knob target, with a numerical position and an explicit confirmation before recording. The dial indicates where to turn the real pedal; it is not an interactive software control or an automatic knob actuator.
 
+The [Plan refinement](plan-quality.md) extends this incumbent proposal for ordinary pedal users. It introduces a single capture-quality decision with automatic settings and collapsed technical detail. It does not establish a new visual world or alter the native planning screen.
+
 **Key Characteristics:**
 
 - The physical task and next action lead; queue, readiness and saved progress support them.
@@ -118,7 +120,9 @@ At the smallest breakpoint, the stage labels are reduced (11px) and headlines st
 
 The browser window approximation has a maximum width (1296px), a project titlebar, a persistent stage sidebar and a main working region. The desktop sidebar is narrow (208px); the main region uses comfortable insets (33px 38px 26px). Supporting regions pair with the main task in two columns; capture reserves the larger region for knob targets and the recording action.
 
-Observed responsive breakpoints are 1440px, 1350px, 1050px, 850px and 480px. Below 850px, navigation becomes a horizontal stage row, supporting regions stack and buttons grow vertically. Below 480px, setup selectors stack. The Plan table deliberately retains a readable internal minimum width (600px), with a first column (160px), inside its own horizontal scroller. Page overflow and internal table scrolling are distinct checks.
+Observed responsive breakpoints are 1440px, 1350px, 1050px, 850px and 480px. Below 850px, navigation becomes a horizontal stage row, supporting regions stack and buttons grow vertically. Below 480px, setup selectors stack.
+
+Plan centers its main quality decision within a bounded region (maximum 760px). The selected quality, its explanation, five-stop slider and recording commitment lead; the pedal summary and collapsed Advanced disclosure follow. At compact widths the effort and pedal summary stack, and secondary stop hints disappear while all five stop names remain. The technical table and coverage plot live inside Advanced. Below 480px, the expanded table deliberately retains a readable internal minimum width (600px), with a first column (160px), inside its own horizontal scroller. Page overflow and internal table scrolling are distinct checks.
 
 The 390px screenshots allow compact inspection of a desktop proposal. They do not establish a phone product, a supported production Qt minimum width or native touch-target compliance.
 
@@ -142,6 +146,8 @@ Blue filled buttons express the main available action. Bordered buttons express 
 
 Visible labels name native browser selectors and text/number inputs. Physical range edits preserve focus on re-render and report invalid values. Routing edits invalidate the earlier simulated route check. Production must translate these contracts into native labels, validation and accessibility behavior.
 
+Plan uses a native browser range input with five discrete stops, a visible Capture quality label and descriptive value text containing the selected level, total recordings and estimated minutes. Its interaction region is tall (48px), with the incumbent blue thumb, standard visible focus and disabled appearance. The input remains mounted during pointer updates so dragging and keyboard focus continue as the summary changes. Muted amber, green and gray track segments support the scale; names, descriptions and state badges carry its meaning. These local track treatments do not introduce new global palette tokens.
+
 ### Navigation
 
 Connect, Plan, Capture, Train and Review form a persistent task sequence. The active stage has a pale blue surface, stronger text and a blue numbered marker on desktop. The compact row retains stage names and hides secondary descriptions. Navigation deliberately keeps example state during the current page session.
@@ -149,6 +155,14 @@ Connect, Plan, Capture, Train and Review form a persistent task sequence. The ac
 ### Notices / Badges
 
 Notices explain a cause and next step in task language. Badges give short state labels; they supplement the action and message rather than carry readiness alone. Advanced settings and diagnostic logs stay available through disclosures.
+
+### Capture-quality plan
+
+Quick test, Decent, Good, Thorough and Overkill form one scale. Good is the initial recommended choice. Quick test explicitly warns about rough spots; Overkill explains diminishing returns. The normal next action is Start capturing. This control describes capture coverage, not a measured sound rating; the preset counts and estimated effort are illustrative for Drive + Tone and require real-pedal validation.
+
+Moving the slider sets training counts, sound-check counts and increments for every modeled knob together. It preserves physical minimum/maximum positions, fixed Level and switches. Recording count and effort update immediately. Advanced starts collapsed and exposes physical bounds, manual increments, counts, playback assumptions and an example coverage plot. Manual edits show Custom settings; moving the slider restores the complete automatic preset while retaining physical bounds.
+
+After the first accepted take, the plan and Advanced fields are disabled. A notice explains that earlier takes belong to that plan, offers Start a separate plan and changes the primary action to Continue capturing. A separate plan retains earlier example count/quality/control metadata and begins at zero; recording or training in progress blocks that transition. Browser state remains in memory. Production needs immutable plan/calibration identities and retained source files before implementing equivalent behavior.
 
 ### Physical knob target
 

@@ -175,6 +175,11 @@
     "range/increment edits persist, change targets, retain focus and recover from invalid input",
     "routing edits persist and invalidate earlier route check",
     "gain adjustment starts separate calibration with zero new takes and preserves earlier session identity",
+    "all five quality levels jointly set recording/test counts and both knob steps while preserving physical ranges",
+    "Good is recommended by default; advanced controls are collapsed; keyboard slider retains focus and reports effort",
+    "pointer dragging keeps the slider mounted and updates the plan through multiple levels",
+    "recording locks the plan; a separate plan preserves earlier take metadata and starts at zero with new quality",
+    "manual advanced edits are marked custom; changing quality restores the complete automatic preset",
     "offline file URL loads complete interactive mockup without server"
   ],
   "console_errors": []
