@@ -36,6 +36,7 @@ for name, size in [('desktop', (1140, 900)), ('compact', (800, 680))]:
             window._open_project(folder)
         window.go_to(index)
         app.processEvents()
+        QTest.qWait(80)
         path = out / f'{stage}-{name}.png'
         window.grab().save(str(path))
         files.append(str(path.relative_to(root)))
@@ -77,6 +78,21 @@ window._open_project(args.run_project)
 window.go_to(1)
 app.processEvents()
 window.grab().save(str(out / 'plan-locked-desktop.png'))
+# Amp layout and switch targets use a genuinely planned pending project.
+amp_folder = Path(tempfile.mkdtemp(prefix='parametric-amp-evidence-'))
+window._create_project(amp_folder)
+window._use_starter(True)
+window.quality_slider.setValue(0)
+window._commit_plan()
+for name, size in [('desktop', (1140, 900)), ('compact', (800, 680))]:
+    window.resize(*size)
+    for stage, index in [('amp-controls', 0), ('amp-targets', 2)]:
+        window.go_to(index)
+        app.processEvents()
+        QTest.qWait(80)
+        path = out / f'{stage}-{name}.png'
+        window.grab().save(str(path))
+        files.append(str(path.relative_to(root)))
 (out / 'evidence.json').write_text(json.dumps({
     'platform': 'Linux Qt offscreen, not macOS',
     'pending_capture_project': str(folder),

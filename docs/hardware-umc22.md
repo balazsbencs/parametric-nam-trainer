@@ -40,8 +40,8 @@ The optional reference route uses INST 2 at low gain. A line output may overload
 3. Start with OUTPUT, reamp level and input gains low. Leave phantom power off for this direct pedal setup. Connect the pedal's correct supply.
 4. In macOS Audio MIDI Setup, select the UMC22 and use 48 kHz for input/output. Use the format the device exposes; writing a 24-bit WAV does not increase the interface's converter resolution.
 5. Grant microphone permission to Terminal/Python/the app that launches capture if macOS asks. Device naming may be generic USB audio, so identify the UMC22 by unplugging and reconnecting if needed.
-6. In **Audio I/O**, select the same UMC22 device for input and output. Main send/return = channel 1. Optional loopback send/return = channel 2. Channels in the app are numbered from one. Start with a 512-frame buffer; increase it if dropouts occur.
-7. Run **Route test** before recording training examples. Verify a clean return, a clean reference if enabled, and a detected timing signal. Software cannot turn DIRECT MONITOR off for you.
+6. In **Connect**, select the same UMC22 device for input and output. Main send/return = channel 1. Optional loopback send/return = channel 2. Channels in the app are numbered from one. Start with a 512-frame buffer; increase it if dropouts occur.
+7. Run **Test connection** before recording training examples. Verify a clean return, a clean reference if enabled, and a detected timing signal. Software cannot turn DIRECT MONITOR off for you.
 
 ## Set levels once
 
@@ -56,10 +56,10 @@ The UMC22's OUTPUT control affects the reference send as well. If it is changed 
 ## Record the first pedal
 
 1. Run **Install.command**, then **Capture.command**.
-2. Create a project in a new folder. Choose the downloaded `inputs/inputTrunc.wav` for training and `inputs/validation.wav` for validation.
-3. Enter the pedal's actual knob names and printed ranges. Begin with Drive and Tone; keep Level and any switches at documented positions. Mark Drive as gain. Use a step you can physically repeat.
-4. Generate the suggested plan, including boundary settings. Review positions that mute the pedal; narrow the range or use avoid-zero where appropriate.
-5. At each prompt, move the controls, let the pedal settle, then press **Capture next**. Review clipping, dropout and timing flags. Repeat failed takes before moving on.
+2. Click **New project** and choose an empty folder. The app copies the verified training and validation signals automatically.
+3. Use **Add knob** / **Add switch** and name the controls you want to model. Begin with Drive and Tone; keep Level fixed. Click a knob's range button to match printed ranges, mark the gain knob, or avoid a silent zero. For a switch, enter its physical position names; every combination adds capture effort. Leave unmodeled switches at documented positions.
+4. In **Plan**, leave Good selected or begin with Quick test, then click **Start capturing**. Review positions that mute the pedal; narrow the range or use avoid-zero where appropriate.
+5. At each prompt, move the controls, let the pedal settle, then confirm the positions and press **Record this setting**. Review clipping, dropout and timing flags. Repeat failed takes before moving on.
 6. Keep the validation section separate. The same settings must not appear in both splits.
 7. Use **Train on Mac → Check captures**, then try a one-epoch run. If that succeeds, start a longer run and compare held-out audio.
 

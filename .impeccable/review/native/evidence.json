@@ -1,7 +1,7 @@
 {
   "platform": "Linux Qt offscreen, not macOS",
-  "pending_capture_project": "/tmp/parametric-native-evidence-lpu68bg3",
-  "real_synthetic_training_project": "/tmp/pytest-of-bbalazs/pytest-11/test_latest_capture_project_ov0",
+  "pending_capture_project": "/tmp/parametric-native-evidence-r3p7obu1",
+  "real_synthetic_training_project": "/tmp/parametric-reviewed-training-project",
   "viewports": {
     "desktop": [
       1140,
@@ -22,7 +22,11 @@
     ".impeccable/review/native/plan-compact.png",
     ".impeccable/review/native/capture-compact.png",
     ".impeccable/review/native/train-compact.png",
-    ".impeccable/review/native/review-compact.png"
+    ".impeccable/review/native/review-compact.png",
+    ".impeccable/review/native/amp-controls-desktop.png",
+    ".impeccable/review/native/amp-targets-desktop.png",
+    ".impeccable/review/native/amp-controls-compact.png",
+    ".impeccable/review/native/amp-targets-compact.png"
   ],
   "additional_states": [
     "check-running-desktop.png",

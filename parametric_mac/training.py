@@ -49,11 +49,11 @@ def prepare_run(directory, device="auto", epochs=200, batch=4):
     directory = Path(directory).expanduser().resolve()
     # Regenerate from the project's latest captures, even if configs were exported earlier.
     if (directory / "capture_project.json").exists():
-        from nam.capture.project import load_project
-        from nam.capture.export import build_data_config, build_concat_model_config, build_concat_learning_config
+        from .controls import load_project, model_config
+        from nam.capture.export import build_data_config, build_concat_learning_config
         project = load_project(directory)
         data = build_data_config(project)
-        model = build_concat_model_config(project)
+        model = model_config(project)
         learning = build_concat_learning_config(project)
     else:
         data = read_json(directory / "data.json")

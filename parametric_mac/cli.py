@@ -46,10 +46,10 @@ def doctor():
 def project_configs(directory):
     directory = Path(directory).expanduser().resolve()
     if (directory / "capture_project.json").exists():
-        from nam.capture.project import load_project
-        from nam.capture.export import build_data_config, build_concat_model_config
+        from .controls import load_project, model_config
+        from nam.capture.export import build_data_config
         project = load_project(directory)
-        return build_data_config(project), build_concat_model_config(project)
+        return build_data_config(project), model_config(project)
     return None, None
 
 

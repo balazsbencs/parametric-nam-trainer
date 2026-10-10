@@ -9,15 +9,17 @@ import shutil
 import signal
 import sys
 from PySide6.QtCore import Qt, QProcess, QProcessEnvironment, QTimer, QUrl, QRectF, QPointF
-from PySide6.QtGui import QDesktopServices, QPainter, QPen, QColor
+from PySide6.QtGui import QDesktopServices, QPainter, QPen, QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
     QComboBox, QSpinBox, QPushButton, QPlainTextEdit, QMessageBox, QStackedWidget,
     QScrollArea, QSlider, QCheckBox, QLineEdit, QFileDialog, QTableWidgetItem,
-    QProgressBar, QSizePolicy,
+    QProgressBar, QSizePolicy, QBoxLayout, QLayout,
 )
 from nam.capture.gui.main import MainWindow, knob_rows_to_specs
-from nam.capture.project import CaptureProject, load_project, save_project, atomic_write_json
+from nam.capture.project import save_project, atomic_write_json
+from .controls import ControlProject as CaptureProject, ControlModel, SwitchSpec, load_project, format_controls, model_config, switch_combinations
+from .control_editor import ControlEditor, starter
 from nam.capture.session import CaptureSession
 from .assets import FILES
 from .workflow import QUALITIES, quality_settings, make_plan, recording_minutes, read_state, write_state
@@ -28,7 +30,7 @@ QMainWindow, QScrollArea, QWidget#page { background: #ffffff; color: #252a32; }
 QWidget { font-size: 14px; color: #252a32; }
 QWidget#sidebar { background: #f6f7f9; border-right: 1px solid #e4e6e9; }
 QLabel[role="title"] { font-size: 28px; font-weight: 600; }
-QLabel[role="section"] { font-size: 18px; font-weight: 600; }
+QLabel[role="section"] { font-size: 15px; font-weight: 600; }
 QLabel[role="quality"] { font-size: 28px; font-weight: 600; }
 QLabel[role="muted"] { color: #606773; }
 QLabel[role="target"] { font-size: 32px; font-weight: 600; color: #175cd3; }
@@ -49,7 +51,9 @@ QSlider::handle:horizontal { background: #175cd3; border: 3px solid #ffffff; wid
 QSlider::groove:horizontal:disabled { background: #e4e6e9; }
 QSlider::handle:horizontal:disabled { background: #929aa6; }
 QSlider:focus { border: 2px solid #175cd3; border-radius: 6px; }
-QProgressBar { border: 1px solid #e4e6e9; border-radius: 4px; text-align: center; min-height: 20px; }
+QStatusBar { background: #f8f9fb; color: #606773; border-top: 1px solid #e4e6e9; }
+QWidget#route { background: #f8f9fb; border: 1px solid #e4e6e9; border-radius: 6px; }
+QProgressBar { background: #f8f9fb; color: #252a32; border: 1px solid #e4e6e9; border-radius: 4px; text-align: center; min-height: 20px; }
 QProgressBar::chunk { background: #b5cbf3; }
 """
 
@@ -57,7 +61,9 @@ QProgressBar::chunk { background: #b5cbf3; }
 def label(text, role=None):
     widget = QLabel(text)
     widget.setWordWrap(True)
-    widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+    policy = QSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+    policy.setHeightForWidth(True)
+    widget.setSizePolicy(policy)
     widget.setTextFormat(Qt.PlainText)
     if role:
         widget.setProperty("role", role)
@@ -73,6 +79,7 @@ def button(text, callback, primary=False):
 
 def disclosure(layout, title, widget):
     toggle = QPushButton(title)
+    toggle.setStyleSheet("text-align: left; border-radius: 0; border: none; border-top: 1px solid #e4e6e9; padding: 12px 0;")
     toggle.setCheckable(True)
     toggle.setAccessibleName(title)
     widget.setVisible(False)
@@ -82,15 +89,96 @@ def disclosure(layout, title, widget):
     return toggle
 
 
+class StageButton(QPushButton):
+    def __init__(self, index, stage, detail, callback):
+        super().__init__()
+        self.index, self.stage, self.detail = index, stage, detail
+        self.setProperty('nav', True)
+        self.setCheckable(True)
+        self.setMinimumHeight(62)
+        self.clicked.connect(callback)
+        self.setAccessibleName(f'{stage} stage: {detail}')
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        active = self.isChecked()
+        painter.setPen(QPen(QColor('#175cd3' if active else '#b8c2d3'), 1))
+        painter.setBrush(QColor('#175cd3') if active else Qt.NoBrush)
+        painter.drawEllipse(QRectF(12, 15, 16, 16))
+        font = painter.font()
+        font.setPixelSize(11)
+        painter.setFont(font)
+        painter.setPen(QColor('#ffffff' if active else '#606773'))
+        painter.drawText(QRectF(12, 15, 16, 16), Qt.AlignCenter, str(self.index + 1))
+        font.setPixelSize(14)
+        font.setBold(active)
+        painter.setFont(font)
+        painter.setPen(QColor('#175cd3' if active else '#252a32'))
+        painter.drawText(QRectF(40, 10, self.width()-46, 22), Qt.AlignLeft | Qt.AlignVCenter, self.stage)
+        font.setPixelSize(12)
+        font.setBold(False)
+        painter.setFont(font)
+        painter.setPen(QColor('#606773'))
+        painter.drawText(QRectF(40, 32, self.width()-46, 20), Qt.AlignLeft | Qt.AlignVCenter, self.detail)
+
+
+class Columns(QWidget):
+    """The mockup's working area and reference column, stacked on narrow windows."""
+    def __init__(self, parent_layout):
+        super().__init__()
+        policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
+        self.box = QBoxLayout(QBoxLayout.LeftToRight, self)
+        self.box.setSizeConstraint(QLayout.SetNoConstraint)
+        self.box.setContentsMargins(0, 0, 0, 0)
+        self.box.setSpacing(28)
+        self.box.setAlignment(Qt.AlignTop)
+        self.columns = []
+        for _ in range(2):
+            panel = QWidget()
+            policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+            policy.setHeightForWidth(True)
+            panel.setSizePolicy(policy)
+            layout = QVBoxLayout(panel)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(12)
+            layout.setSizeConstraint(QLayout.SetNoConstraint)
+            layout.setAlignment(Qt.AlignTop)
+            self.box.addWidget(panel, 1)
+            self.columns.append(layout)
+        parent_layout.addWidget(self)
+
+    def reflow(self, available):
+        direction = QBoxLayout.TopToBottom if available < 780 else QBoxLayout.LeftToRight
+        if self.box.direction() != direction:
+            self.box.setDirection(direction)
+            for index in range(self.box.count()):
+                self.box.setStretch(index, 0 if direction == QBoxLayout.TopToBottom else 1)
+            self.updateGeometry()
+
+
+class PageScroll(QScrollArea):
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        for columns in self.findChildren(Columns):
+            columns.reflow(self.viewport().width() - 16)
+
+
+
+
 class KnobTargets(QWidget):
     """Read-only physical dial positions, never software controls."""
     def __init__(self):
         super().__init__()
         self.targets = []
-        self.setAccessibleName("Physical pedal knob positions")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.setAccessibleName("Physical knob positions")
 
     def set_targets(self, entry, knobs):
-        self.targets = [(k, entry.params[k.name]) for k in knobs] if entry else []
+        self.targets = [(k, entry.params[k.name]) for k in knobs if not isinstance(k, SwitchSpec)] if entry else []
         self.setAccessibleDescription(", ".join(f"{k.name} {v:g}, range {k.min:g} to {k.max:g}" for k, v in self.targets))
         self._size_targets()
         self.update()
@@ -99,6 +187,7 @@ class KnobTargets(QWidget):
         columns = max(1, min(3, self.width() // 170))
         self.setMinimumHeight(math.ceil(len(self.targets) / columns) * 165)
         self.setVisible(bool(self.targets))
+        self.updateGeometry()
 
     def resizeEvent(self, event):
         self._size_targets()
@@ -127,6 +216,11 @@ class KnobTargets(QWidget):
             painter.setFont(font)
             painter.setPen(QColor("#252a32"))
             painter.drawText(QRectF(col*width, row*165+141, width, 22), Qt.AlignCenter, knob.name)
+            font.setPixelSize(11)
+            painter.setFont(font)
+            painter.setPen(QColor('#606773'))
+            painter.drawText(QRectF(center.x()-51, row*165+85, 48, 18), Qt.AlignLeft, f'{knob.min:g}')
+            painter.drawText(QRectF(center.x()+3, row*165+85, 48, 18), Qt.AlignRight, f'{knob.max:g}')
 
 
 class QualityStops(QWidget):
@@ -163,13 +257,30 @@ class MacWindow(MainWindow):
         self._log_buffer = ""
         self._workflow = {}
         super().__init__()
-        self.setWindowTitle("Parametric — pedal capture & training")
+        self.setWindowTitle("Parametric — capture & training")
+        palette = QPalette()
+        for role, color in [(QPalette.Window, '#ffffff'), (QPalette.WindowText, '#252a32'),
+                            (QPalette.Base, '#ffffff'), (QPalette.AlternateBase, '#f8f9fb'),
+                            (QPalette.Text, '#252a32'), (QPalette.Button, '#ffffff'),
+                            (QPalette.ButtonText, '#252a32'), (QPalette.Highlight, '#175cd3'),
+                            (QPalette.HighlightedText, '#ffffff')]:
+            palette.setColor(role, QColor(color))
+        self.setPalette(palette)
+        # QMacStyle defaults squeeze fields and center forms. Make geometry explicit.
+        for form in self.findChildren(QFormLayout):
+            form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+            form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+            form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        for field in self.findChildren((QLineEdit)) + self.findChildren(QComboBox):
+            field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.version_label.setText("NAM engine " + self.version_label.text())
         self.setStyleSheet(STYLE)
         self.resize(1140, 840)
         self.setMinimumSize(760, 580)
         self._ready = True
         self._applying = False
         self.loopback_check.setChecked(False)
+        self._mirror_controls()
         self._apply_quality(2)
         self._refresh_all()
 
@@ -202,31 +313,30 @@ class MacWindow(MainWindow):
         outer.setSpacing(0)
         sidebar = QWidget()
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(172)
+        sidebar.setFixedWidth(208)
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(12, 24, 12, 20)
         side.addWidget(label("Parametric", "section"))
-        side.addWidget(label("Your pedal, captured.", "muted"))
+        self.sidebar_summary = label("Knobs & switches · mono", "muted")
+        side.addWidget(self.sidebar_summary)
         side.addSpacing(24)
         self.nav_buttons = []
         self.pages = QStackedWidget()
         for i, stage in enumerate(STAGES):
-            nav = button(stage, lambda checked=False, index=i: self.go_to(index))
-            nav.setProperty("nav", True)
-            nav.setCheckable(True)
-            nav.setAccessibleName(f"{stage} stage")
+            nav = StageButton(i, stage, ("Audio & wiring", "Controls & coverage", "Record your gear", "Build the model", "Check & export")[i],
+                              lambda checked=False, index=i: self.go_to(index))
             side.addWidget(nav)
             self.nav_buttons.append(nav)
         side.addStretch()
         self.activity_label = label("No job running", "muted")
         side.addWidget(self.activity_label)
-        side.addWidget(label("Local capture & training\nContinuous knobs", "muted"))
+        side.addWidget(label("A model with real controls.\nCapture several settings.\nTrain one controllable model.", "muted"))
         outer.addWidget(sidebar)
         right = QWidget()
         content = QVBoxLayout(right)
-        content.setContentsMargins(24, 16, 24, 12)
+        content.setContentsMargins(30, 16, 30, 12)
         header = QHBoxLayout()
-        self.project_title = label("Start with a pedal project", "section")
+        self.project_title = label("Start a capture project", "section")
         header.addWidget(self.project_title, 1)
         self.new_button = button("New project", self._on_new_project)
         self.open_button = button("Open project", self._on_open_project)
@@ -256,7 +366,7 @@ class MacWindow(MainWindow):
         self.go_to(0)
 
         self._mutating = [self.new_button, self.open_button, self.pedal_name,
-                          self.knob_names, self.fixed_notes, self.audio_controls,
+                          self.control_editor, self.gear_kind, self.fixed_notes, self.audio_controls,
                           self.route_test_button, self.plan_advanced, self.quality_slider,
                           self.plan_button, self.check_button, self.train_button,
                           self.train_settings, self.capture_next_button,
@@ -272,11 +382,12 @@ class MacWindow(MainWindow):
             check.toggled.connect(self._sync_states)
         self.pedal_name.editingFinished.connect(self._save_details)
         self.fixed_notes.editingFinished.connect(self._save_details)
-        self.knob_names.editingFinished.connect(self._set_knob_names)
+        self.control_editor.changed.connect(self._controls_changed)
+        self.gear_kind.currentIndexChanged.connect(self._gear_changed)
         self.review_check.toggled.connect(self._save_review)
 
     def _page(self, title, intro):
-        scroll = QScrollArea()
+        scroll = PageScroll()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
         page = QWidget()
@@ -284,6 +395,7 @@ class MacWindow(MainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(8, 24, 8, 24)
         layout.setSpacing(16)
+        layout.setAlignment(Qt.AlignTop)
         layout.addWidget(label(title, "title"))
         layout.addWidget(label(intro, "muted"))
         scroll.setWidget(page)
@@ -291,36 +403,77 @@ class MacWindow(MainWindow):
         return layout
 
     def _connect_page(self):
-        layout = self._page("Connect your pedal", "Set up once. Keep these levels fixed throughout the capture session.")
+        layout = self._page("Connect your gear", "A clean, repeatable route is the foundation of a good model. Set up once, then keep levels fixed.")
+        columns = Columns(layout)
+        left, right = columns.columns
+        left.addWidget(label("Your project", "section"))
         details = QFormLayout()
         self.pedal_name = QLineEdit("My pedal")
+        self.gear_kind = QComboBox()
+        self.gear_kind.addItems(["Pedal", "Amp"])
+        self.fixed_notes = QLineEdit("Level at 5")
+        # Kept hidden only for compatibility with old scripts; editing uses rows.
         self.knob_names = QLineEdit("Drive, Tone")
-        self.fixed_notes = QLineEdit("Level at 5; all switches fixed")
-        for text, widget in (("Pedal name", self.pedal_name), ("Knobs to model", self.knob_names),
-                             ("Keep fixed", self.fixed_notes)):
+        self.knob_names.hide()
+        for text, widget in (("Name", self.pedal_name), ("Gear", self.gear_kind), ("Keep fixed", self.fixed_notes)):
             widget.setAccessibleName(text)
             details.addRow(text, widget)
-        layout.addLayout(details)
-        layout.addWidget(label("UMC22 wiring", "section"))
-        layout.addWidget(label("OUTPUT L  →  reamp box  →  pedal input\nPedal output  →  MIC/LINE 1 (¼-inch jack)"))
-        layout.addWidget(label("You’ll need a reamp box, audio cables and the pedal’s correct power supply. "
-                               "Set the UMC22 to 48 kHz in Audio MIDI Setup.", "muted"))
-        self.reamp_check = QCheckBox("Reamp box and powered pedal are connected")
-        self.monitor_check = QCheckBox("Direct Monitor and DAW monitoring are off; capture outputs are not connected to speakers")
-        self.level_check = QCheckBox("Loudest pedal setting has headroom; interface and reamp levels will stay fixed")
-        for check in (self.reamp_check, self.monitor_check, self.level_check):
-            # Long instructions wrap in the label; the checkbox keeps a compact hit target.
-            if check is self.monitor_check:
-                check.setText("Monitoring off; no speakers on capture outputs")
-            if check is self.level_check:
-                check.setText("Loudest setting has headroom; keep all levels fixed")
-            layout.addWidget(check)
+        left.addLayout(details)
+        left.addSpacing(10)
+        left.addWidget(label("Controls to model", "section"))
+        left.addWidget(label("Add the knobs and switches you want in the model. Leave other controls fixed.", "muted"))
+        self.control_editor = ControlEditor()
+        left.addWidget(self.control_editor)
+        presets = QHBoxLayout()
+        presets.addWidget(button("Pedal starter", lambda: self._use_starter(False)))
+        presets.addWidget(button("Amp starter", lambda: self._use_starter(True)))
+        self.starter_actions = QWidget()
+        self.starter_actions.setLayout(presets)
+        left.addWidget(self.starter_actions)
+        left.addSpacing(10)
+        left.addWidget(label("Your recording setup", "section"))
         self.audio_controls = QWidget()
         form = QFormLayout(self.audio_controls)
         form.setContentsMargins(0, 0, 0, 0)
         form.addRow("Audio interface", self.device_combo)
-        form.addRow("To pedal · output", self.output_channel_spin)
-        form.addRow("From pedal · input", self.input_channel_spin)
+        form.addRow("Send · output", self.output_channel_spin)
+        form.addRow("Return · input", self.input_channel_spin)
+        left.addWidget(self.audio_controls)
+        left.addWidget(self.no_devices_label)
+        left.addWidget(self.sample_rate_warning_label)
+        row = QHBoxLayout()
+        self.refresh_devices_button = button("Refresh interfaces", self._refresh_devices)
+        self.route_test_button.setText("Test connection")
+        row.addWidget(self.refresh_devices_button)
+        row.addWidget(self.route_test_button)
+        left.addLayout(row)
+        left.addWidget(self.route_test_progress)
+        left.addWidget(self.route_test_result_label)
+        right.addWidget(label("The signal route", "section"))
+        route = QWidget()
+        route.setObjectName("route")
+        signal = QVBoxLayout(route)
+        signal.setContentsMargins(16, 14, 16, 14)
+        signal.setSpacing(18)
+        self.route_labels = []
+        for title, explanation in [("UMC22 OUTPUT L", "Line-level send"),
+                                   ("Reamp box", "Set a repeatable instrument level"),
+                                   ("Gear input → output", "Physical knobs and switches"),
+                                   ("UMC22 MIC/LINE 1", "Use the ¼-inch line input")]:
+            title_label, explanation_label = label(title, "section"), label(explanation, "muted")
+            signal.addWidget(title_label)
+            signal.addWidget(explanation_label)
+            self.route_labels.append((title_label, explanation_label))
+        right.addWidget(route)
+        self.wiring_note = label("You’ll need a reamp box, audio cables and the pedal’s correct power supply. Set the UMC22 to 48 kHz in Audio MIDI Setup.", "muted")
+        right.addWidget(self.wiring_note)
+        right.addSpacing(10)
+        right.addWidget(label("Before audio starts", "section"))
+        self.reamp_check = QCheckBox("Reamp box and powered gear connected")
+        self.monitor_check = QCheckBox("Monitoring off; capture speakers disconnected")
+        self.level_check = QCheckBox("Loudest setting clean; levels fixed")
+        for check in (self.reamp_check, self.monitor_check, self.level_check):
+            right.addWidget(check)
         advanced = QWidget()
         extra = QFormLayout(advanced)
         self.loopback_check.setText("Use optional clean timing loopback")
@@ -330,31 +483,40 @@ class MacWindow(MainWindow):
         extra.addRow("Loopback input", self.loopback_input_channel_spin)
         extra.addRow("Buffer size", self.buffer_size_combo)
         extra.addRow("Stream latency", self.latency_combo)
-        # Unpatched loopback is not assumed on a first launch.
         self.loopback_check.setChecked(False)
-        layout.addWidget(self.audio_controls)
-        self.audio_advanced_toggle = disclosure(layout, "Advanced audio routing", advanced)
-        # Disable advanced routing along with normal settings during any job.
+        self.audio_advanced_toggle = disclosure(right, "Advanced audio routing", advanced)
         self.audio_advanced = advanced
-        layout.addWidget(self.no_devices_label)
-        layout.addWidget(self.sample_rate_warning_label)
-        row = QHBoxLayout()
-        self.refresh_devices_button = button("Refresh interfaces", self._refresh_devices)
-        self.route_test_button.setText("Test connection")
-        row.addWidget(self.refresh_devices_button)
-        row.addWidget(self.route_test_button)
-        row.addStretch()
-        layout.addLayout(row)
-        layout.addWidget(self.route_test_progress)
-        layout.addWidget(self.route_test_result_label)
         self.connect_button = button("Continue to plan", lambda: self.go_to(1), True)
         layout.addWidget(self.connect_button, alignment=Qt.AlignRight)
         layout.addStretch()
 
     def _plan_page(self):
-        layout = self._page("Choose your capture quality", "One control sets the sampling and knob precision. You turn the real pedal’s knobs when prompted.")
-        self.quality_name = label("Good · Recommended", "quality")
-        layout.addWidget(self.quality_name)
+        layout = self._page("Choose your capture quality", "One slider sets coverage and dial precision for all your controls. You turn the real knobs when prompted.")
+        outer = layout
+        quality_panel = QWidget()
+        quality_panel.setMaximumWidth(780)
+        layout = QVBoxLayout(quality_panel)
+        layout.setContentsMargins(24, 30, 24, 18)
+        layout.setSpacing(16)
+        centered = QHBoxLayout()
+        centered.addStretch(0)
+        centered.addWidget(quality_panel, 1)
+        centered.addStretch(0)
+        outer.addLayout(centered)
+        layout.addWidget(label('Capture quality', 'section'))
+        self.quality_name = label("Good", "quality")
+        self.quality_name.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Minimum)
+        self.quality_recommendation = label('Recommended')
+        self.quality_recommendation.setStyleSheet('color: #25664d; background: #edf6f1; padding: 5px 9px; border-radius: 4px;')
+        self.quality_recommendation.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        quality_heading = QHBoxLayout()
+        quality_heading.addWidget(self.quality_name)
+        quality_heading.addWidget(self.quality_recommendation)
+        quality_heading.addStretch()
+        layout.addLayout(quality_heading)
+        self.quality_description = label(QUALITIES[2].description, 'muted')
+        layout.addWidget(self.quality_description)
+        layout.addSpacing(20)
         self.quality_slider = QSlider(Qt.Horizontal)
         self.quality_slider.setRange(0, 4)
         self.quality_slider.setValue(2)
@@ -365,10 +527,9 @@ class MacWindow(MainWindow):
         self.quality_slider.valueChanged.connect(self._apply_quality)
         layout.addWidget(self.quality_slider)
         layout.addWidget(QualityStops())
-        self.quality_description = label(QUALITIES[2].description)
-        layout.addWidget(self.quality_description)
         self.effort_label = label("", "section")
         layout.addWidget(self.effort_label)
+        layout = outer
         self.plan_summary = label("", "muted")
         layout.addWidget(self.plan_summary)
         layout.addWidget(label("Coverage is a starting point, not a promise of sound quality. Training time is separate. "
@@ -378,10 +539,8 @@ class MacWindow(MainWindow):
         self.plan_advanced = QWidget()
         extra = QVBoxLayout(self.plan_advanced)
         extra.setContentsMargins(0, 8, 0, 8)
-        extra.addWidget(label("Physical dial ranges", "section"))
-        extra.addWidget(label("Defaults use a 0–10 dial. Change Min/Max to match your pedal. Drive avoids zero to prevent silent captures. "
-                              "Level and switches stay fixed; use a new project for another switch position.", "muted"))
-        extra.addWidget(self.knob_table)
+        extra.addWidget(label("Sampling settings", "section"))
+        extra.addWidget(label("Edit physical ranges and switch positions in Connect. With more than eight knobs, boundary captures sweep each knob separately instead of every corner combination.", "muted"))
         form = QFormLayout()
         form.addRow("Random training settings", self.n_train_spin)
         form.addRow("Unseen test settings", self.n_validation_spin)
@@ -406,6 +565,17 @@ class MacWindow(MainWindow):
 
     def _capture_page(self):
         layout = self._page("Capture one setting at a time", "Set the knobs, confirm their positions, then record. Keep all other controls fixed.")
+        columns = Columns(layout)
+        layout, reference = columns.columns
+        layout.parentWidget().setObjectName('route')
+        layout.setContentsMargins(20, 18, 20, 18)
+        reference.addWidget(label('The capture queue', 'section'))
+        self.queue_preview = QWidget()
+        self.queue_rows = QVBoxLayout(self.queue_preview)
+        self.queue_rows.setContentsMargins(0, 0, 0, 0)
+        self.queue_rows.setSpacing(0)
+        reference.addWidget(self.queue_preview)
+        reference.addWidget(label('Test settings follow training takes. They check how well the model works between recorded positions.', 'muted'))
         self.capture_count = label("Create a plan to begin.", "section")
         layout.addWidget(self.capture_count)
         self.target_label = label("No setting queued", "section")
@@ -414,7 +584,7 @@ class MacWindow(MainWindow):
         layout.addWidget(self.knob_targets)
         self.capture_hint = label("", "muted")
         layout.addWidget(self.capture_hint)
-        self.confirm_knobs = QCheckBox("The pedal’s knobs match these positions")
+        self.confirm_knobs = QCheckBox("The knobs and switches match these positions")
         layout.addWidget(self.confirm_knobs)
         row = QHBoxLayout()
         self.capture_next_button.setText("Record this setting")
@@ -439,18 +609,19 @@ class MacWindow(MainWindow):
         row.addWidget(self.check_captures_button)
         extra.addLayout(row)
         extra.addWidget(self.capture_log)
-        disclosure(layout, "Queue and recording details", details)
+        disclosure(reference, "Queue and recording details", details)
         maintenance = QWidget()
         extra = QVBoxLayout(maintenance)
         extra.addWidget(self.clear_captures_button)
         extra.addWidget(self.export_concat_button)
-        disclosure(layout, "Advanced capture tools", maintenance)
+        disclosure(reference, "Advanced capture tools", maintenance)
         self.capture_continue = button("Continue to training", lambda: self.go_to(3), True)
         layout.addWidget(self.capture_continue, alignment=Qt.AlignRight)
-        layout.addStretch()
 
     def _train_page(self):
-        layout = self._page("Train your pedal model", "Your Mac learns how the pedal changes as you turn its knobs. Each run gets its own folder.")
+        layout = self._page("Train your model", "Your Mac learns how your gear changes as you turn its controls. Each run gets its own folder.")
+        columns = Columns(layout)
+        layout, reference = columns.columns
         self.train_readiness = label("Capture a project first.", "section")
         layout.addWidget(self.train_readiness)
         self.train_settings = QWidget()
@@ -489,9 +660,9 @@ class MacWindow(MainWindow):
         self.stop_button = button("Stop training", self._stop)
         row.addWidget(self.check_button)
         row.addWidget(self.train_button)
-        row.addWidget(self.stop_button)
         row.addStretch()
         layout.addLayout(row)
+        layout.addWidget(self.stop_button, alignment=Qt.AlignLeft)
         self.status_label = label("Open or create a project to begin.")
         layout.addWidget(self.status_label)
         self.train_progress = QProgressBar()
@@ -502,18 +673,21 @@ class MacWindow(MainWindow):
         self.retry_button = button("Retry on CPU", self._retry_cpu)
         self.retry_button.hide()
         layout.addWidget(self.retry_button, alignment=Qt.AlignLeft)
+        reference.addWidget(label('Before you train', 'section'))
+        reference.addWidget(label('Every recording is checked for alignment and usable audio. Unseen test settings stay out of training.', 'muted'))
         self.train_log = QPlainTextEdit()
         self.train_log.setReadOnly(True)
         self.train_log.setMaximumBlockCount(10000)
         self.train_log.setAccessibleName("Training log")
         self.train_log.setMinimumHeight(200)
-        disclosure(layout, "Training log and errors", self.train_log)
+        disclosure(reference, "Training log and errors", self.train_log)
         self.train_continue = button("Review saved runs", lambda: self.go_to(4))
         layout.addWidget(self.train_continue, alignment=Qt.AlignRight)
-        layout.addStretch()
 
     def _review_page(self):
         layout = self._page("Review your model", "An export is the beginning of review. Check unseen settings and listen before sharing it.")
+        columns = Columns(layout)
+        layout, reference = columns.columns
         self.run_combo = QComboBox()
         self.run_combo.setAccessibleName("Saved training run")
         self.run_combo.currentIndexChanged.connect(self._show_run)
@@ -524,16 +698,16 @@ class MacWindow(MainWindow):
         layout.addWidget(self.review_status)
         layout.addWidget(self.review_metric)
         layout.addWidget(self.model_path)
-        layout.addWidget(label("Listen in NamParametricPlugin", "section"))
-        layout.addWidget(label("This parametric architecture needs the matching player. The stock NAM plugin cannot load it. "
+        reference.addWidget(label("Listen in NamParametricPlugin", "section"))
+        reference.addWidget(label("This parametric architecture needs the matching player. The stock NAM plugin cannot load it. "
                                "Use the model’s same knob ranges, and compare against your saved test recordings.", "muted"))
-        layout.addWidget(button("Get compatible player", lambda: QDesktopServices.openUrl(QUrl("https://github.com/phillipmself/NamParametricPlugin"))), alignment=Qt.AlignLeft)
-        layout.addWidget(label("Check low, middle and high positions of each modeled knob; sweep between them and listen for differences, noise and level changes. "
+        reference.addWidget(button("Get compatible player", lambda: QDesktopServices.openUrl(QUrl("https://github.com/phillipmself/NamParametricPlugin"))), alignment=Qt.AlignLeft)
+        reference.addWidget(label("Check low, middle and high positions of each modeled knob; sweep between them and listen for differences, noise and level changes. "
                                "Test settings were held out of training. There is no built-in A/B player in this version.", "muted"))
-        self.review_check = QCheckBox("I listened in the compatible player and checked unseen settings")
-        layout.addWidget(self.review_check)
+        self.review_check = QCheckBox("I listened and checked unseen settings")
+        reference.addWidget(self.review_check)
         self.review_note = label("", "muted")
-        layout.addWidget(self.review_note)
+        reference.addWidget(self.review_note)
         row = QHBoxLayout()
         self.save_model_button = button("Save model…", self._save_model, True)
         self.folder_button = button("Open run folder", self._open_outputs)
@@ -543,7 +717,6 @@ class MacWindow(MainWindow):
         row.addWidget(self.recordings_button)
         row.addStretch()
         layout.addLayout(row)
-        layout.addStretch()
 
     def go_to(self, index):
         self.pages.setCurrentIndex(index)
@@ -577,9 +750,10 @@ class MacWindow(MainWindow):
         if not self._ready or self._busy() or self._plan_locked():
             return
         try:
-            knobs = knob_rows_to_specs(self._knob_table_rows())
+            knobs = self.control_editor.controls
             knobs, train, tests = quality_settings(knobs, level)
             self._applying = True
+            self.control_editor.controls = knobs
             for row, knob in enumerate(knobs):
                 self.knob_table.setItem(row, 3, QTableWidgetItem(str(knob.step)))
             self.n_train_spin.setValue(train)
@@ -606,7 +780,8 @@ class MacWindow(MainWindow):
         if not self._ready:
             return
         quality = QUALITIES[self._quality] if self._quality is not None else None
-        self.quality_name.setText((quality.name + (" · Recommended" if self._quality == 2 else "")) if quality else "Custom capture plan")
+        self.quality_name.setText(quality.name if quality else "Custom capture plan")
+        self.quality_recommendation.setVisible(self._quality == 2)
         self.quality_description.setText(quality.description if quality else "Advanced settings are active. Move the quality slider to restore a complete preset.")
         if self._plan_locked():
             self.quality_description.setText("Recording has started. Continue with the saved capture settings.")
@@ -614,7 +789,7 @@ class MacWindow(MainWindow):
             if self._plan_locked():
                 self._preview = self.project
             else:
-                self._preview = make_plan(knob_rows_to_specs(self._knob_table_rows()), self.n_train_spin.value(),
+                self._preview = make_plan(self.control_editor.controls, self.n_train_spin.value(),
                                           self.n_validation_spin.value(), self.seed_spin.value(), self.include_corners_check.isChecked())
             train = len(self._preview.entries_for_split("train"))
             tests = len(self._preview.entries_for_split("validation"))
@@ -622,11 +797,12 @@ class MacWindow(MainWindow):
             self.effort_label.setText(f"{train + tests} recordings · about {recording_minutes(self._preview, *seconds)} minutes")
             self.plan_summary.setText(f"{train} training recordings · {tests} unseen test recordings\n"
                                       + "Modeling: " + ", ".join(k.name for k in self._preview.knob_specs())
-                                      + f" · Keep fixed: {self.fixed_notes.text()}\nEstimate allows 10 seconds to turn knobs; breaks and retries add time.")
+                                      + f" · {switch_combinations(self._preview.knob_specs())} switch combination(s)\nKeep fixed: {self.fixed_notes.text()}\nEstimate allows 10 seconds to set controls; breaks and retries add time.")
         except ValueError as exc:
             self._preview = None
             self.effort_label.setText("Adjust your capture settings")
             self.plan_summary.setText(str(exc))
+        self._refresh_corner_count()
         self._sync_states()
 
     def _input_durations(self):
@@ -638,29 +814,80 @@ class MacWindow(MainWindow):
                 pass
         return 38, 7
 
-    def _set_knob_names(self):
-        if self._busy() or self._plan_locked():
+    def _refresh_corner_count(self):
+        if not hasattr(self, 'corner_count_label') or not hasattr(self, 'control_editor'):
             return
-        names = [name.strip() for name in self.knob_names.text().split(",") if name.strip()]
-        if not names or len(names) > 8 or len(set(names)) != len(names):
-            self.plan_summary.setText("Enter 1–8 unique knob names, separated by commas.")
-            self.knob_names.setText(", ".join(row[0] for row in self._knob_table_rows()))
+        from nam.capture.planner import corner_capture_count
+        from .controls import boundary_settings
+        controls = self.control_editor.controls
+        knobs = tuple(c for c in controls if not isinstance(c, SwitchSpec))
+        if not knobs:
             return
-        rows = {row[0]: row for row in self._knob_table_rows()}
+        count = corner_capture_count(knobs) if len(knobs) <= 8 else len(boundary_settings(knobs))
+        try:
+            count *= switch_combinations(controls)
+            self.corner_count_label.setText(f'Up to {count} boundary recordings, before removing duplicates.')
+        except ValueError as exc:
+            self.corner_count_label.setText(str(exc))
+
+    def _mirror_controls(self):
+        was_applying = self._applying
         self._applying = True
         self.knob_table.setRowCount(0)
-        gain_seen = False
-        for name in names:
-            values = list(rows.get(name, (name, 0, 10, .5, name.lower() in ("drive", "gain"), name.lower() in ("drive", "gain"))))
-            if values[5] and gain_seen:
-                values[5] = False
-            gain_seen |= bool(values[5])
-            self._add_knob_row(*values)
-        self._applying = False
+        for c in self.control_editor.controls:
+            self._add_knob_row(c.name, c.min, c.max, c.step, c.avoid_zero, c.is_gain)
+        self.knob_names.setText(", ".join(c.name for c in self.control_editor.controls))
+        self._applying = was_applying
+
+    def _controls_changed(self):
+        if self._busy() or self._plan_locked():
+            return
+        self._mirror_controls()
         if self._quality is not None:
             self._apply_quality(self._quality)
         else:
             self._refresh_preview()
+        # Draft control edits never relabel an existing saved capture plan.
+        if self.project and not self.project.entries:
+            self.project.knobs = [ControlModel.from_spec(c) for c in self.control_editor.controls]
+            save_project(self.project, self.project_dir)
+        if self.project:
+            self._workflow['draft_controls'] = [ControlModel.from_spec(c).model_dump() for c in self.control_editor.controls]
+            write_state(self.project_dir, self._workflow)
+        self.sidebar_summary.setText(f'{len(self.control_editor.controls)} controls · mono')
+
+    def _use_starter(self, amp):
+        if self._busy() or self._plan_locked():
+            return
+        self.gear_kind.setCurrentIndex(int(amp))
+        self.control_editor.set_controls(starter(amp))
+        self.fixed_notes.setText('Cabinet / load-box settings fixed' if amp else 'Level at 5')
+        self._controls_changed()
+        self._save_details()
+
+    def _gear_changed(self):
+        amp = self.gear_kind.currentIndex() == 1
+        self.route_labels[2][0].setText('Amp → load box / DI' if amp else 'Pedal input → output')
+        self.route_labels[2][1].setText('Speaker output to a matching load; DI / line return' if amp else 'Physical knobs and switches')
+        self.wiring_note.setText(
+            'Amp capture: reamp → amp input → a suitable load box / DI → interface line input. Never connect a speaker output directly to the UMC22. Match the load to your amp; see the README.' if amp else
+            'You’ll need a reamp box, audio cables and the pedal’s correct power supply. Set the UMC22 to 48 kHz in Audio MIDI Setup.')
+        self.reamp_check.setText('Reamp and correct amp load / DI connected' if amp else 'Reamp box and powered gear connected')
+        self._route_fingerprint = None
+        self.reamp_check.setChecked(False)
+        if self._ready and not self._applying:
+            self._save_details()
+
+    def _on_export_concat_configs(self):
+        from nam.capture.export import write_concat_training_configs
+        def writer(project, directory):
+            paths = write_concat_training_configs(project, directory)
+            # The pinned upstream writer drops enums. Restore typed switch metadata.
+            for path in paths:
+                if 'model' in Path(path).name:
+                    atomic_write_json(path, model_config(project))
+            return paths
+        self._export_configs('ConcatWaveNet', writer)
 
     def _save_details(self):
         if not self.project or self._busy() or self._plan_locked():
@@ -668,6 +895,7 @@ class MacWindow(MainWindow):
         self.project.name = self.pedal_name.text().strip() or self.project_dir.name
         save_project(self.project, self.project_dir)
         self._workflow["fixed_notes"] = self.fixed_notes.text()
+        self._workflow["gear_kind"] = "amp" if self.gear_kind.currentIndex() else "pedal"
         write_state(self.project_dir, self._workflow)
         self._refresh_all()
 
@@ -693,11 +921,11 @@ class MacWindow(MainWindow):
         for source, dest in (("inputTrunc.wav", "input_train.wav"), ("validation.wav", "input_validation.wav")):
             shutil.copy2(inputs / source, directory / dest)
         audio = self._current_audio_settings().model_copy(deep=True)
-        self.project = CaptureProject(name=self.pedal_name.text().strip() or directory.name, knobs=[], audio=audio)
+        self.project = CaptureProject(name=self.pedal_name.text().strip() or directory.name, knobs=[ControlModel.from_spec(c) for c in self.control_editor.controls], audio=audio)
         self.project_dir = directory
         self._train_input_name, self._validation_input_name = "input_train.wav", "input_validation.wav"
         self.session = CaptureSession(self.project, directory)
-        self._workflow = {"quality": self._quality, "fixed_notes": self.fixed_notes.text(), "plan_locked": False}
+        self._workflow = {"quality": self._quality, "fixed_notes": self.fixed_notes.text(), "plan_locked": False, "gear_kind": "amp" if self.gear_kind.currentIndex() else "pedal"}
         self._route_fingerprint = None
         for check in (self.reamp_check, self.monitor_check, self.level_check):
             check.setChecked(False)
@@ -736,10 +964,13 @@ class MacWindow(MainWindow):
         self._quality = stored_quality if type(stored_quality) is int and 0 <= stored_quality <= 4 else None
         self.pedal_name.setText(project.name)
         self.fixed_notes.setText(self._workflow.get("fixed_notes", "Keep unmodeled controls at their recorded positions"))
-        self._load_knobs_into_ui()
-        if not project.knobs:
-            self._add_knob_row("Drive", 0, 10, .5, True, True)
-            self._add_knob_row("Tone", 0, 10, .5)
+        controls = project.knob_specs() or starter()
+        if not self._plan_locked() and self._workflow.get('draft_controls'):
+            controls = tuple(ControlModel.model_validate(c).to_knob_spec() for c in self._workflow['draft_controls'])
+        self.control_editor.set_controls(controls)
+        self._mirror_controls()
+        self.gear_kind.setCurrentIndex(1 if self._workflow.get("gear_kind") == "amp" else 0)
+        self._gear_changed()
         self.knob_names.setText(", ".join(row[0] for row in self._knob_table_rows()))
         self.quality_slider.setValue(self._quality if self._quality is not None else 2)
         self._applying = False
@@ -770,7 +1001,6 @@ class MacWindow(MainWindow):
         if self._plan_locked():
             self.go_to(2)
             return
-        self._set_knob_names()
         self._refresh_preview()
         if self._preview is None:
             return
@@ -783,7 +1013,8 @@ class MacWindow(MainWindow):
         save_project(project, self.project_dir)
         self.project = project
         self.session = CaptureSession(project, self.project_dir)
-        self._workflow.update(quality=self._quality, fixed_notes=self.fixed_notes.text(), plan_locked=False)
+        self._workflow.pop("draft_controls", None)
+        self._workflow.update(quality=self._quality, fixed_notes=self.fixed_notes.text(), plan_locked=False, gear_kind="amp" if self.gear_kind.currentIndex() else "pedal")
         write_state(self.project_dir, self._workflow)
         self._refresh_all()
         self.go_to(2)
@@ -815,7 +1046,7 @@ class MacWindow(MainWindow):
         row = self.capture_table.currentRow()
         if 0 <= row < len(self._displayed_entries):
             entry = self._displayed_entries[row]
-            self.target_label.setText(" · ".join(f"{k}: {v:g}" for k, v in entry.params.items()))
+            self.target_label.setText(format_controls(entry.params, self.project.knob_specs()))
             self.knob_targets.set_targets(entry, self.project.knob_specs())
             self.capture_hint.setText("Selected setting for rerecording. Use Rerecord selected setting below. Record this setting resumes the next pending take.")
         self._sync_states()
@@ -824,7 +1055,7 @@ class MacWindow(MainWindow):
         if self._busy() or not self.confirm_knobs.isChecked() or not self._route_ready():
             return
         # A selected row must never confirm a different pending setting.
-        expected = " · ".join(f"{k}: {v:g}" for k, v in entry.params.items())
+        expected = format_controls(entry.params, self.project.knob_specs())
         if self.target_label.text() != expected:
             self.target_label.setText(expected)
             self.knob_targets.set_targets(entry, self.project.knob_specs())
@@ -873,27 +1104,44 @@ class MacWindow(MainWindow):
         if not self._ready:
             return
         self.project_title.setText((self.project.name or self.project_dir.name) if self.project else
-                                   self.project_dir.name if self.project_dir else "Start with a pedal project")
+                                   self.project_dir.name if self.project_dir else "Start a capture project")
         if self.project:
             captured = len(self.project.captured_entries())
             total = len(self.project.entries)
             self.capture_count.setText(f"{captured} of {total} recordings saved" if total else "Choose a capture quality in Plan.")
             entry = self._next_pending_entry()
             self.knob_targets.set_targets(entry, self.project.knob_specs())
-            self.target_label.setText(" · ".join(f"{k}: {v:g}" for k, v in entry.params.items()) if entry else "All planned settings recorded" if total else "No setting queued")
+            self.target_label.setText(format_controls(entry.params, self.project.knob_specs()) if entry else "All planned settings recorded" if total else "No setting queued")
             self.capture_hint.setText(("Unseen test setting" if entry.split == "validation" else "Training setting") + f" · Keep fixed: {self.fixed_notes.text()}" if entry else "Continue to training when the recordings are ready.")
             self.train_readiness.setText(f"{captured}/{total} recordings saved. " + ("Ready to check and train." if total and captured == total else "Finish your capture plan first."))
+        if self.project:
+            entries = [e for e in self._entries_in_display_order() if e.status == 'pending'][:5]
+            while self.queue_rows.count():
+                item = self.queue_rows.takeAt(0)
+                item.widget().hide()
+                item.widget().deleteLater()
+            for i, entry in enumerate(entries):
+                text = format_controls(entry.params, self.project.knob_specs()) + '\n' + (
+                    'Set these positions next' if i == 0 else 'Unseen test setting' if entry.split == 'validation' else 'Training setting')
+                row = label(text, 'muted')
+                row.setStyleSheet('padding: 12px 0; border-bottom: 1px solid #e4e6e9;')
+                self.queue_rows.addWidget(row)
+            if not entries:
+                self.queue_rows.addWidget(label('All planned takes are saved.' if self.project.entries else 'Create a capture plan to see the next settings.', 'muted'))
+            self.sidebar_summary.setText(f'{len(self.control_editor.controls)} controls · mono')
         self.confirm_knobs.setChecked(False)
         self._sync_states()
 
     def _refresh_sample_rate_warning(self):
         super()._refresh_sample_rate_warning()
+        for warning in (self.sample_rate_warning_label, self.capture_sample_rate_warning_label):
+            warning.setText(warning.text().replace('⚠', '').strip())
         if self._ready:
             self._sync_states()
 
     def _refresh_status_bar(self):
         if not self.project:
-            self.status_bar.showMessage("Create or open a pedal project to begin.")
+            self.status_bar.showMessage("Create or open a project to begin.")
             return
         self.status_bar.showMessage(f"{len(self.project.captured_entries())} of {len(self.project.entries)} recordings saved")
 
@@ -907,7 +1155,7 @@ class MacWindow(MainWindow):
         locked = self._plan_locked()
         self.advanced_plan_hint.setText("These are the saved settings used to label this project’s recordings." if locked else
                                         "Manual changes show Custom. Moving the quality slider restores preset counts and steps, while keeping physical ranges and knob roles.")
-        for widget in (self.quality_slider, self.plan_advanced, self.knob_names, self.fixed_notes, self.pedal_name):
+        for widget in (self.quality_slider, self.plan_advanced, self.control_editor, self.gear_kind, self.fixed_notes, self.pedal_name):
             widget.setEnabled(not busy and not locked)
         self.plan_lock_label.setText("This plan is locked because recording has started. Create a separate project to change quality, knobs or levels." if locked else "Create or open a project using the buttons above." if not self.project else "")
         self.separate_button.setVisible(locked)

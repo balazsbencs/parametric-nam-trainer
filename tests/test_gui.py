@@ -125,6 +125,82 @@ try:
 except ValueError:
     pass
 assert path.is_file()
+# Control editing works without entering comma-separated names or editing JSON.
+window.close()
+window = MacWindow()
+window.show()
+second = root / 'amp-project'
+second.mkdir()
+window._create_project(second, assets)
+from PySide6.QtWidgets import QFormLayout, QLineEdit, QPlainTextEdit, QDialog, QDialogButtonBox
+from PySide6.QtCore import QTimer, Qt
+from parametric_mac.controls import SwitchSpec, load_project
+assert all(f.fieldGrowthPolicy() == QFormLayout.AllNonFixedFieldsGrow for f in window.findChildren(QFormLayout))
+assert all(f.formAlignment() == (Qt.AlignLeft | Qt.AlignTop) for f in window.findChildren(QFormLayout))
+QTest.mouseClick(window.control_editor.add_knob, Qt.LeftButton)
+assert len(window.control_editor.controls) == 3
+window.control_editor.remove(2)
+assert len(window.control_editor.controls) == 2
+window._use_starter(True)
+assert len(window.control_editor.controls) == 7
+assert isinstance(window.control_editor.controls[-1], SwitchSpec)
+assert window.gear_kind.currentText() == 'Amp'
+assert 'Never connect a speaker output' in window.wiring_note.text()
+assert len(load_project(second).knob_specs()) == 7  # saved draft
+window._open_project(second)
+assert len(window.control_editor.controls) == 7
+assert window.gear_kind.currentText() == 'Amp'
+# Edit a named switch through its properties dialog.
+def save_positions():
+    dialog = window.findChild(QDialog)
+    dialog.findChild(QPlainTextEdit).setPlainText('Normal\\nBright\\nBrighter')
+    QTest.mouseClick(dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.Save), Qt.LeftButton)
+QTimer.singleShot(20, save_positions)
+window.control_editor.edit(6)
+assert window.control_editor.controls[-1].enum_names == ('Normal', 'Bright', 'Brighter')
+window.quality_slider.setValue(0)
+window._commit_plan()
+assert {(e.params['Bright']) for e in window.project.entries_for_split('validation')} == {0, 1, 2}
+window._open_project(second)
+assert window.project.knob_specs()[-1].enum_names == ('Normal', 'Bright', 'Brighter')
+assert 'Normal' in window.target_label.text() or 'Bright' in window.target_label.text()
+assert 'Bright: 0' not in window.target_label.text()
+# Larger knob counts remain practical to edit and preview.
+for i in range(17):
+    window.control_editor.add_control()
+assert len(window.control_editor.controls) == 24
+assert window._preview is not None
+assert len(window._preview.entries) < 5000
+assert not window.control_editor.add_knob.isEnabled()
+# Geometry must work with larger layouts, not just the data pipeline.
+window.resize(800, 680)
+for stage in (0, 1, 2, 3, 4):
+    window.go_to(stage)
+    QTest.qWait(80)
+    page = window.pages.widget(stage)
+    assert page.horizontalScrollBar().maximum() == 0, (stage, page.widget().size())
+    if stage == 0:
+        assert window.control_editor.scroll.verticalScrollBar().maximum() > 0
+        assert all(field.height() >= 34 for field in window.control_editor.rows.findChildren(QLineEdit))
+    if stage == 1:
+        assert window.quality_slider.width() >= 430
+    if stage == 4:
+        from parametric_mac.gui import Columns
+        columns = page.findChild(Columns)
+        first, second = [item.parentWidget() for item in columns.columns]
+        assert 20 <= second.y() - first.y() - first.height() <= 36
+        from PySide6.QtCore import QPoint
+        heading = columns.columns[1].itemAt(0).widget()
+        visible_gap = heading.mapTo(columns, QPoint(0, 0)).y() - window.folder_button.mapTo(columns, QPoint(0, window.folder_button.height())).y()
+        assert 20 <= visible_gap <= 40, visible_gap
+    if stage == 2:
+        import math
+        cols = max(1, min(3, window.knob_targets.width() // 170))
+        assert window.knob_targets.height() >= math.ceil(len(window.knob_targets.targets)/cols)*165
+        assert window.capture_hint.y() >= window.knob_targets.y() + window.knob_targets.height()
+        next_target = window._next_pending_entry()
+        from parametric_mac.controls import format_controls
+        assert window.queue_rows.itemAt(0).widget().text().startswith(format_controls(next_target.params, window.project.knob_specs()))
 window.close()
 app.processEvents()
 print('GUI workflow check passed')

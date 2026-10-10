@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import math
 from nam.capture.planner import _grid_capacity, corner_capture_count
-from nam.capture.project import new_project, add_corner_captures
+from .controls import SwitchSpec, ControlProject, ControlModel, plan_controls, switch_combinations, continuous_plan, boundary_settings, safe_capture_paths
 
 
 @dataclass(frozen=True)
@@ -27,11 +27,16 @@ QUALITIES = (
 
 def quality_settings(knobs, level):
     quality = QUALITIES[level]
+    all_controls = knobs
+    combinations = switch_combinations(all_controls)
+    knobs = tuple(k for k in knobs if not isinstance(k, SwitchSpec))
+    if not knobs:
+        raise ValueError("Add at least one knob to model alongside your switches.")
     knobs = tuple(replace(k, step=round((k.max - k.min) * quality.fraction, 6), default=None)
                   for k in knobs)
     specs = tuple(k.to_param_spec() for k in knobs)
     capacity = _grid_capacity(specs, .5)
-    corners = corner_capture_count(knobs)
+    corners = corner_capture_count(knobs) if len(knobs) <= 8 else len(boundary_settings(knobs))
     # A small one-knob grid can saturate. Keep test allocation bounded so moving
     # toward Thorough/Overkill doesn't consume progressively more training points.
     test_budget = max(3, capacity // 10)
@@ -39,21 +44,30 @@ def quality_settings(knobs, level):
     train = min(quality.per_knob * len(knobs), capacity - tests)
     if train < 1 or tests < 1:
         raise ValueError("These knob ranges leave no unseen test settings. Use wider ranges or a finer step in Advanced.")
-    return knobs, train, tests
+    replaced = {k.name: k for k in knobs}
+    controls = tuple(replaced.get(c.name, c) for c in all_controls)
+    return controls, train * combinations, tests * combinations
 
 
 def make_plan(knobs, train, tests, seed=0, corners=True, **kwargs):
-    if not 1 <= len(knobs) <= 8:
-        raise ValueError("Model 1–8 continuous knobs. Keep other knobs and switches fixed.")
+    if not 1 <= len(knobs) <= 24:
+        raise ValueError("Model 1–24 controls in one project.")
     if train + tests > 5000:
         raise ValueError("Use fewer than 5,001 settings in one plan; split larger experiments into separate projects.")
     if any((k.max - k.min) / k.step > 2000 for k in knobs):
         raise ValueError("The knob step is too fine for hand-set controls. Use at most 2,001 positions per knob.")
-    project = new_project(knobs, n_train=train, n_validation=tests, seed=seed, **kwargs)
+    if any(isinstance(c, SwitchSpec) for c in knobs):
+        project = plan_controls(knobs, train, tests, seed, corners, **kwargs)
+        if len(project.entries) > 5000:
+            raise ValueError("This plan exceeds 5,000 recordings. Lower quality or keep some controls fixed.")
+        return safe_capture_paths(project)
+    project = continuous_plan(knobs, train, tests, seed, corners)
+    for key, value in kwargs.items():
+        setattr(project, key, value)
     project.include_initial_corners = corners
-    if corners:
-        add_corner_captures(project)
-    return project
+    if len(project.entries) > 5000:
+        raise ValueError("This plan exceeds 5,000 recordings. Lower quality or keep some controls fixed.")
+    return safe_capture_paths(ControlProject(**{**project.model_dump(), "knobs": [ControlModel.from_spec(c) for c in knobs]}))
 
 
 def recording_minutes(project, train_seconds=38, test_seconds=7):
