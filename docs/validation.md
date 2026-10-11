@@ -16,6 +16,28 @@ Shell launcher syntax is checked with `bash -n`. Both real excitation downloads 
 
 The suite emits a PyTorch Lightning deprecation warning about TreeSpec; this does not prevent export. Source configs are pinned to the reviewed trainer revision. Transitive package versions are not fully locked.
 
+## Ardor interoperability and A2 profiles
+
+The compatibility pass runs the real CPU trainer for A2 Standard (8 channels) and A2 Nano (3 channels), then checks their actual `ConcatWaveNet` 1.0.0 exports. Both preserve the 23-layer A2 kernel/dilation pattern. Export tests also verify amp/pedal identity and unchanged weights, config and calibration metadata. The full suite passed **50 tests**, with five upstream Lightning deprecation warnings, in **58.90 seconds** on Linux. Native GUI checks additionally cover persisted architecture choices, disabled selectors during jobs and readable Train layouts at desktop and compact widths.
+
+`scripts/export-ardor-reference.py` reloads exported weights into the pinned Python runtime and generates audio references, including defaults, extrema and switch positions. Ardor's `pedal-parametric-trainer-compat-smoke` compares those references with its C++ runtime at 13- and 64-frame buffer sizes. The shared fixture includes trained Standard, Nano and switch models, plus an initialized 24-control Nano model for the maximum-control contract. Ardor's asset-store tests upload the exact exports and verify their controls and amp/pedal categories. This proves format and inference interoperability; the initialized fixture and one-epoch synthetic training do not establish capture quality.
+
+Preflight now requires 48 kHz recordings and at most 24 controls to match Ardor. The GUI Train page was inspected with Linux Qt offscreen renders at 1140×900 and 800×680. Mac, MPS and physical hardware qualification remain outstanding.
+
+## Combined Standard + Nano export
+
+The full suite now passes **52 tests** (seven upstream Lightning deprecation warnings, 81.90 seconds). Combined-mode tests run one actual CPU epoch for each size, retain typed switch controls, verify that the final container embeds the exact individual exports, and preserve per-tier validation metrics. An interruption test confirms that stopping the second tier retains the first without publishing a combined file. Packaging rejects inconsistent controls, gear types and input calibration. Dry-run preparation snapshots both models and their common data/learning settings.
+
+Ardor's regression test compares 14 additional Python audio cases with both children of the combined file at 13- and 64-frame buffers. It also selects Standard and Nano after loading the processor, preserving control values and independent loudness normalization. Upload/list/rename produces one asset; the native drawer retains the size choice and switch in the preset. Train and Review were inspected at 1140×900 and 800×680 using the native GUI test project; its example Review metrics are UI fixtures. CPU training and exported-model inference are verified separately with real synthetic training runs. Mac hardware qualification remains outstanding.
+
+## FiLM training and export
+
+The final full trainer suite passed **57 tests** with ten upstream Lightning deprecation warnings in **130.20 seconds** on Linux. This includes both combined-mode interruption cases (concat and FiLM), real concat training, three real FiLM training runs, native GUI checks, and the capture configuration export action. FiLM runs use joint target normalization and the existing checkpoint/export workflow. Tests cover gradients through every modulation layer and the chunked DC filter, export/reload with physical ranges, output-scale compensation, 16-control limits, switch rejection, preserved individual calibration, and combined normalized playback.
+
+Ardor's final compatibility smoke passed in **105.44 seconds**, including 18 FiLM audio cases at 13- and 64-frame buffer sizes, both bundled tiers, switching sizes with controls retained, native preset restoration, and malformed export rejection. Maximum absolute Python/C++ error across the 36 FiLM comparisons was **2.36183e-6**. The actual combined pedal and individual amp exports also pass Go upload/rename/list checks. Fixtures and reproduction details are in Ardor's `tests/fixtures/parametric-trainer-film.md`. No Gene Ko player binary was run; interoperability here is verified against Ardor's supported Gene Ko format and C++ kernels.
+
+Train and Review were inspected at 1140×900 and 800×680. Review uses actual one-epoch synthetic FiLM metrics, copied into a native UI test project; its high ESR values are not presented as finished gear models. The advanced capture export action has a format-neutral label and writes the selected FiLM configuration. UI inspection was performed in-thread because the user prohibits subagents. Disposition: **ship**; changed controls and copy remain readable, native scrolling and pinned actions are preserved, and no material UI findings remain. The design detector reported two existing advisory values (32px and `#25664d`), both outside this change. Mac/CoreAudio, MPS, physical-gear accuracy, and Raspberry Pi performance still require hardware qualification.
+
 ## Still needs your Mac and pedal
 
 1. Run **Install.command**, then `.venv/bin/parametric doctor`. Confirm native arm64 Python, Tk, Qt, MPS availability and the connected UMC22. The doctor's MPS check exercises a convolution/backprop operation, not the complete model.

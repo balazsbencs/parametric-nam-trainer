@@ -139,7 +139,7 @@ class Columns(QWidget):
         self.columns = []
         for _ in range(2):
             panel = QWidget()
-            policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+            policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
             policy.setHeightForWidth(True)
             panel.setSizePolicy(policy)
             layout = QVBoxLayout(panel)
@@ -613,6 +613,7 @@ class MacWindow(MainWindow):
         maintenance = QWidget()
         extra = QVBoxLayout(maintenance)
         extra.addWidget(self.clear_captures_button)
+        self.export_concat_button.setText("Export training configs")
         extra.addWidget(self.export_concat_button)
         disclosure(reference, "Advanced capture tools", maintenance)
         self.capture_continue = button("Continue to training", lambda: self.go_to(3), True)
@@ -634,6 +635,17 @@ class MacWindow(MainWindow):
         self.training_mode.setAccessibleName("Training duration")
         self.training_mode.currentIndexChanged.connect(self._set_duration)
         options.addWidget(self.training_mode)
+        layout.addWidget(label("Model architecture", "section"))
+        from .architectures import ARCHITECTURES
+        self.model_architecture = QComboBox()
+        self.model_architecture.setAccessibleName("Model architecture")
+        for key, title in ARCHITECTURES.items():
+            self.model_architecture.addItem(title, key)
+        self.model_architecture.currentIndexChanged.connect(self._save_architecture)
+        layout.addWidget(self.model_architecture)
+        self.architecture_hint = label("Standard + Nano trains both sizes and saves one model for Ardor. "
+                                       "Training runs twice; each size gets the selected number of epochs.", "muted")
+        layout.addWidget(self.architecture_hint)
         advanced = QWidget()
         form = QFormLayout(advanced)
         self.device = QComboBox()
@@ -698,10 +710,12 @@ class MacWindow(MainWindow):
         layout.addWidget(self.review_status)
         layout.addWidget(self.review_metric)
         layout.addWidget(self.model_path)
-        reference.addWidget(label("Listen in NamParametricPlugin", "section"))
-        reference.addWidget(label("This parametric architecture needs the matching player. The stock NAM plugin cannot load it. "
+        reference.addWidget(label("Listen to the exported model", "section"))
+        reference.addWidget(label("Upload this model in Ardor’s manager, then add it from the modules drawer. "
+                               "Ardor supports concat and FiLM exports, including Standard + Nano files. "
+                               "NamParametricPlugin supports individual concat exports. "
                                "Use the model’s same knob ranges, and compare against your saved test recordings.", "muted"))
-        reference.addWidget(button("Get compatible player", lambda: QDesktopServices.openUrl(QUrl("https://github.com/phillipmself/NamParametricPlugin"))), alignment=Qt.AlignLeft)
+        reference.addWidget(button("Get concat player", lambda: QDesktopServices.openUrl(QUrl("https://github.com/phillipmself/NamParametricPlugin"))), alignment=Qt.AlignLeft)
         reference.addWidget(label("Check low, middle and high positions of each modeled knob; sweep between them and listen for differences, noise and level changes. "
                                "Test settings were held out of training. There is no built-in A/B player in this version.", "muted"))
         self.review_check = QCheckBox("I listened and checked unseen settings")
@@ -741,6 +755,19 @@ class MacWindow(MainWindow):
             self.training_mode.setItemText(2, f"Custom training duration · {value} epochs")
             index = 2
         self.training_mode.setCurrentIndex(index)
+
+    def _save_architecture(self, *args):
+        from .architectures import is_film, is_dual
+        architecture = self.model_architecture.currentData()
+        if hasattr(self, "architecture_hint"):
+            text = ("FiLM supports up to 16 continuous controls. Use concat for switches. " if is_film(architecture)
+                    else "Concat supports up to 24 controls, including switches. ")
+            text += ("Both sizes are saved in one model; each gets the selected number of epochs." if is_dual(architecture)
+                     else "Trains and saves the selected model size.")
+            self.architecture_hint.setText(text)
+        if self._ready and not self._applying and self.project_dir and not self._busy():
+            self._workflow["model_architecture"] = self.model_architecture.currentData()
+            write_state(self.project_dir, self._workflow)
 
     def _plan_locked(self):
         # Sticky once any take was accepted, including if a file goes missing later.
@@ -881,13 +908,15 @@ class MacWindow(MainWindow):
     def _on_export_concat_configs(self):
         from nam.capture.export import write_concat_training_configs
         def writer(project, directory):
+            selected_model = model_config(project, self.model_architecture.currentData())
             paths = write_concat_training_configs(project, directory)
             # The pinned upstream writer drops enums. Restore typed switch metadata.
             for path in paths:
                 if 'model' in Path(path).name:
-                    atomic_write_json(path, model_config(project))
+                    atomic_write_json(path, selected_model)
             return paths
-        self._export_configs('ConcatWaveNet', writer)
+        from .architectures import is_film
+        self._export_configs('FiLM A2' if is_film(self.model_architecture.currentData()) else 'ConcatWaveNet', writer)
 
     def _save_details(self):
         if not self.project or self._busy() or self._plan_locked():
@@ -925,7 +954,9 @@ class MacWindow(MainWindow):
         self.project_dir = directory
         self._train_input_name, self._validation_input_name = "input_train.wav", "input_validation.wav"
         self.session = CaptureSession(self.project, directory)
-        self._workflow = {"quality": self._quality, "fixed_notes": self.fixed_notes.text(), "plan_locked": False, "gear_kind": "amp" if self.gear_kind.currentIndex() else "pedal"}
+        self._workflow = {"quality": self._quality, "fixed_notes": self.fixed_notes.text(), "plan_locked": False,
+                          "gear_kind": "amp" if self.gear_kind.currentIndex() else "pedal",
+                          "model_architecture": self.model_architecture.currentData()}
         self._route_fingerprint = None
         for check in (self.reamp_check, self.monitor_check, self.level_check):
             check.setChecked(False)
@@ -957,6 +988,8 @@ class MacWindow(MainWindow):
         self.session = CaptureSession(project, self.project_dir)
         self._train_input_name, self._validation_input_name = project.train_input, project.validation_input
         self._workflow = read_state(directory)
+        architecture_index = self.model_architecture.findData(self._workflow.get("model_architecture", "auto"))
+        self.model_architecture.setCurrentIndex(max(0, architecture_index))
         if project.captured_entries():
             self._workflow["plan_locked"] = True
             write_state(directory, self._workflow)
@@ -1170,6 +1203,7 @@ class MacWindow(MainWindow):
         self.capture_selected_button.setEnabled(can_record and self.capture_table.currentRow() >= 0)
         self.capture_continue.setEnabled(complete)
         self.check_button.setEnabled(not busy and self.project_dir is not None)
+        self.model_architecture.setEnabled(not busy)
         # Legacy config-only projects may be checked/trained without a capture manifest.
         self.train_button.setEnabled(not busy and (complete or (self.project is None and self.project_dir is not None)))
         self.confirm_knobs.setEnabled(not busy and bool(self.project and self.project.entries))
@@ -1203,6 +1237,7 @@ class MacWindow(MainWindow):
         process.setProcessEnvironment(env)
         process.setWorkingDirectory(str(self.project_dir))
         args = ["-m", "parametric_mac", command, str(self.project_dir)]
+        args += ["--architecture", self.model_architecture.currentData()]
         if command == "train":
             args += ["--device", self.device.currentData(), "--epochs", str(self.epochs.value()), "--batch", str(self.batch.value())]
         self.process = process
@@ -1327,7 +1362,16 @@ class MacWindow(MainWindow):
         self.model_path.setText(str(run / "model_parametric.nam") if exported else state.get("error", "Capture and train a project to create a model."))
         metrics = self._run_json(run, "metrics.json") if run else {}
         esr = metrics.get("ESR")
-        self.review_metric.setText(f"Last logged validation ESR: {esr:.6g} · epoch {metrics.get('epoch')}\nThis is the last epoch, not a separate evaluation of the exported checkpoint. Lower is better; listen too." if isinstance(esr, (int, float)) else "No validation metric recorded for this run. Inspect training.log for details.")
+        if isinstance(metrics.get("tiers"), dict):
+            lines = []
+            for tier, values in metrics["tiers"].items():
+                value = values.get("ESR")
+                lines.append(f"{tier.capitalize()}: last validation ESR {value:.6g} · epoch {values.get('epoch')}"
+                             if isinstance(value, (int, float)) else f"{tier.capitalize()}: no validation ESR recorded")
+            lines.append("Last epochs, not separate evaluations of the exported checkpoints. Listen to both sizes.")
+            self.review_metric.setText("\n".join(lines))
+        else:
+            self.review_metric.setText(f"Last logged validation ESR: {esr:.6g} · epoch {metrics.get('epoch')}\nThis is the last epoch, not a separate evaluation of the exported checkpoint. Lower is better; listen too." if isinstance(esr, (int, float)) else "No validation metric recorded for this run. Inspect training.log for details.")
         self.review_check.blockSignals(True)
         self.review_check.setChecked(bool(reviewed))
         self.review_check.blockSignals(False)
@@ -1358,7 +1402,7 @@ class MacWindow(MainWindow):
                 try:
                     if Path(dest).resolve() != source.resolve():
                         shutil.copy2(source, dest)
-                    self.review_note.setText(f"Model saved to {dest}. Load it in NamParametricPlugin.")
+                    self.review_note.setText(f"Model saved to {dest}. Upload it in Ardor’s NAM models manager.")
                 except OSError as exc:
                     self.review_note.setText(f"Could not save model: {exc}")
 

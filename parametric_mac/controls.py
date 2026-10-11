@@ -55,7 +55,7 @@ def load_project(directory):
     return project
 
 
-def model_config(project):
+def model_config(project, architecture="auto"):
     from nam.capture.export import build_concat_model_config
     model = build_concat_model_config(project)
     params = []
@@ -66,7 +66,8 @@ def model_config(project):
             spec.pop('enum_names', None)
         params.append(spec)
     model['net']['config']['params'] = params
-    return model
+    from .architectures import apply_architecture
+    return apply_architecture(model, architecture)
 
 
 def switch_combinations(controls):

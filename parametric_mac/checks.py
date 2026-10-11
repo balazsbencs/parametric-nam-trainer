@@ -75,9 +75,15 @@ def check_project(directory, data=None, model=None):
         if data.get("type") != "parametric":
             raise ValueError("data.json must use type 'parametric'. Export ConcatWaveNet configs in Capture.")
         params = model["net"]["config"]["params"]
+        from .architectures import FILM_FACTORY
+        if model["net"]["name"] == FILM_FACTORY:
+            if not 1 <= len(params) <= 16:
+                raise ValueError("FiLM requires 1–16 continuous controls. Choose a concat profile for more controls.")
+            if any(p.get("type", "continuous") != "continuous" for p in params):
+                raise ValueError("FiLM supports continuous controls only. Choose a concat profile for switches.")
         names = [p["name"] for p in params]
-        if not names or any(not str(n).strip() for n in names) or len(set(names)) != len(names):
-            raise ValueError("Model controls must have nonempty unique names.")
+        if not names or len(names) > 24 or any(not str(n).strip() for n in names) or len(set(names)) != len(names):
+            raise ValueError("Model requires 1–24 controls with nonempty unique names.")
         # Lower-bound receptive field for the fork's exported ConcatWaveNet recipe.
         receptive = 1
         for layer in model["net"]["config"].get("layers", []):
@@ -164,6 +170,8 @@ def check_project(directory, data=None, model=None):
             report.errors.append("All input and output WAVs must have the same sample rate.")
         else:
             report.sample_rate = next(iter(rates))
+            if report.sample_rate != 48000:
+                report.errors.append("Ardor-compatible parametric models require 48000 Hz recordings.")
             declared = model["net"]["config"].get("sample_rate")
             if declared and declared != report.sample_rate:
                 report.errors.append("Model sample rate differs from the captured audio.")
