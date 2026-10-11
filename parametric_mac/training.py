@@ -11,6 +11,8 @@ import hashlib
 from contextlib import redirect_stdout, redirect_stderr
 from . import UPSTREAM_REV
 from .checks import absolute_data, check_project, read_json
+from .architectures import apply_architecture, is_film, is_dual, FILM_FACTORY
+from .workflow import read_state
 
 
 def select_device(requested="auto"):
@@ -45,13 +47,17 @@ def mac_learning_config(original, device, epochs=200, batch=4):
     return config
 
 
-def prepare_run(directory, device="auto", epochs=200, batch=4):
+def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None):
     directory = Path(directory).expanduser().resolve()
+    state = read_state(directory)
+    architecture = architecture if architecture is not None else state.get("model_architecture", "auto")
+    name = directory.name
     # Regenerate from the project's latest captures, even if configs were exported earlier.
     if (directory / "capture_project.json").exists():
         from .controls import load_project, model_config
         from nam.capture.export import build_data_config, build_concat_learning_config
         project = load_project(directory)
+        name = project.name or name
         data = build_data_config(project)
         model = model_config(project)
         learning = build_concat_learning_config(project)
@@ -59,20 +65,28 @@ def prepare_run(directory, device="auto", epochs=200, batch=4):
         data = read_json(directory / "data.json")
         model = read_json(directory / "model_concat.json")
         learning = read_json(directory / "learning_concat.json")
+    model = apply_architecture(model, architecture)
     report = check_project(directory, data, model)
     if not report.ok:
         raise ValueError(report.text())
-    if model["net"]["name"] != "ConcatWaveNet":
-        raise ValueError("This Mac workflow supports ConcatWaveNet. Export ConcatWaveNet configs first.")
+    if model["net"]["name"] not in ("ConcatWaveNet", FILM_FACTORY):
+        raise ValueError("This workflow supports concat and FiLM A2 models.")
     selected = select_device(device)
     learning = mac_learning_config(learning, selected, epochs, batch)
     data = absolute_data(data, directory)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = directory / "outputs" / f"{stamp}-{uuid.uuid4().hex[:8]}"
+    gear_type = state.get("gear_kind", "pedal")
+    if gear_type not in ("pedal", "amp"):
+        raise ValueError("Project gear kind must be pedal or amp.")
     out.mkdir(parents=True, exist_ok=False)
     manifest = {"upstream_revision": UPSTREAM_REV, "device": selected, "python": sys.version,
                 "platform": platform.platform(), "project": str(directory), "warnings": report.warnings,
-                "requested_epochs": epochs, "batch_size": batch}
+                "requested_epochs": epochs, "batch_size": batch,
+                "model_architecture": architecture, "model_name": name, "gear_type": gear_type,
+                "export_format": "SlimmableContainer" if is_dual(architecture) else
+                                 ("ParametricWaveNet" if is_film(architecture) else "ConcatWaveNet"),
+                "export_version": "0.7.0" if is_film(architecture) else "1.0.0"}
     import torch
     import nam
     manifest.update(torch_version=torch.__version__, nam_version=nam.__version__)
@@ -90,25 +104,84 @@ def prepare_run(directory, device="auto", epochs=200, batch=4):
         manifest["audio_sha256"][path] = digest.hexdigest()
     for name, value in (("data", data), ("model", model), ("learning", learning), ("manifest", manifest)):
         (out / f"{name}.json").write_text(json.dumps(value, indent=2) + "\n")
+    if is_dual(architecture):
+        for tier in ("standard", "nano"):
+            child = out / "tiers" / tier
+            child.mkdir(parents=True)
+            profile = f"{'film' if is_film(architecture) else 'a2'}-{tier}"
+            for name, value in (("data", data), ("model", apply_architecture(model, profile)),
+                                ("learning", learning), ("manifest", {**manifest,
+                                 "model_architecture": profile, "export_format":
+                                 "ParametricWaveNet" if is_film(profile) else "ConcatWaveNet"})):
+                (child / f"{name}.json").write_text(json.dumps(value, indent=2) + "\n")
     return out
 
 
-def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False):
+def finish_exports(out):
+    """Retain exported inference/calibration fields and add the project's gear identity."""
+    from nam.capture.project import atomic_write_json
+    manifest = read_json(out / "manifest.json")
+    for path in out.glob("*_parametric.nam"):
+        model = read_json(path)
+        expected = ("ParametricWaveNet", "0.7.0") if is_film(manifest["model_architecture"]) else ("ConcatWaveNet", "1.0.0")
+        if (model.get("architecture"), model.get("version")) != expected or model.get("sample_rate") != 48000:
+            raise RuntimeError("Trainer export is not an Ardor-compatible 48 kHz model of the selected architecture.")
+        metadata = model.setdefault("metadata", {})
+        metadata.update(name=manifest["model_name"], gear_type=manifest["gear_type"])
+        metadata["training_architecture"] = manifest["model_architecture"]
+        atomic_write_json(path, model)
+
+
+def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False, architecture=None):
     # Fail unsupported operations visibly, rather than quietly falling back on CPU.
     # Users can explicitly retry the identical captured dataset with --device cpu.
-    out = prepare_run(directory, device, epochs, batch)
+    out = prepare_run(directory, device, epochs, batch, architecture)
     print(f"Run folder: {out}", flush=True)
     print(f"Settings: {read_json(out / 'manifest.json')['device']}, {epochs} epochs, batch {batch}", flush=True)
     if dry_run:
         print("Preflight passed; configs saved. No training started.", flush=True)
         return out
+    if not is_dual(read_json(out / "manifest.json")["model_architecture"]):
+        return _train_prepared(out)
+    from nam.capture.project import atomic_write_json
+    from .bundle import bundle_a2
+    atomic_write_json(out / "status.json", {"status": "running"})
+    try:
+        metrics = {}
+        for index, tier in enumerate(("standard", "nano")):
+            print(f"Training tier: {tier.capitalize()} · {epochs} epochs", flush=True)
+            child = out / "tiers" / tier
+            _train_prepared(child, tier.capitalize(), index * epochs, 2 * epochs)
+            metrics[tier] = read_json(child / "metrics.json")
+        bundle_a2(out / "tiers/standard/model_parametric.nam", out / "tiers/nano/model_parametric.nam",
+                  out / "model_parametric.nam")
+        atomic_write_json(out / "metrics.json", {"tiers": metrics})
+        atomic_write_json(out / "status.json", {"status": "exported"})
+        print(f"Model exported: {out / 'model_parametric.nam'} · Standard + Nano", flush=True)
+    except BaseException as exc:
+        atomic_write_json(out / "status.json", {"status": "failed_or_interrupted", "error": str(exc)})
+        raise
+    finally:
+        with (out / "training.log").open("w") as combined_log:
+            for tier in ("standard", "nano"):
+                log = out / "tiers" / tier / "training.log"
+                if log.is_file():
+                    combined_log.write(f"\n{tier.capitalize()}\n")
+                    with log.open() as source:
+                        for line in source:
+                            combined_log.write(line)
+    return out
+
+
+def _train_prepared(out, tier="", epoch_offset=0, total_epochs=None):
     os.environ.setdefault("MPLBACKEND", "Agg")
     from nam.train import parametric as trainer_module
     import pytorch_lightning as pl
 
     class Progress(pl.Callback):
         def on_train_epoch_start(self, trainer, module):
-            print(f"Epoch {trainer.current_epoch + 1}/{trainer.max_epochs} started", flush=True)
+            print(f"Epoch {epoch_offset + trainer.current_epoch + 1}/{total_epochs or trainer.max_epochs} started"
+                  + (f" · {tier}" if tier else ""), flush=True)
 
         def on_train_batch_end(self, trainer, module, outputs, batch, batch_idx):
             if (batch_idx + 1) % 25 == 0:
@@ -128,7 +201,8 @@ def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False):
                         saved_metrics[key] = number
             from nam.capture.project import atomic_write_json
             atomic_write_json(out / "metrics.json", saved_metrics)
-            print(f"Epoch {trainer.current_epoch + 1} finished. " + ", ".join(metrics), flush=True)
+            print(f"Epoch {epoch_offset + trainer.current_epoch + 1} finished. "
+                  + (f"{tier}: " if tier else "") + ", ".join(metrics), flush=True)
 
     class Tee:
         def __init__(self, console, logfile):
@@ -148,10 +222,16 @@ def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False):
 
     # This pinned trainer builds callbacks internally. Add progress without modifying
     # its source or replacing checkpoint/validation callbacks. Restore after the run.
-    create_callbacks = trainer_module._create_parametric_callbacks
-    trainer_module._create_parametric_callbacks = lambda *a, **kw: [*create_callbacks(*a, **kw), Progress()]
     state = {"status": "running"}
     (out / "status.json").write_text(json.dumps(state))
+    create_callbacks = trainer_module._create_parametric_callbacks
+    original_export = trainer_module._export_parametric
+    if is_film(read_json(out / "manifest.json")["model_architecture"]):
+        from .film import FiLMA2, export_film
+        def export_model(model, *args, **kwargs):
+            return (export_film if isinstance(model, FiLMA2) else original_export)(model, *args, **kwargs)
+        trainer_module._export_parametric = export_model
+    trainer_module._create_parametric_callbacks = lambda *a, **kw: [*create_callbacks(*a, **kw), Progress()]
     try:
         with (out / "training.log").open("w", buffering=1) as logfile:
             with redirect_stdout(Tee(sys.stdout, logfile)), redirect_stderr(Tee(sys.stderr, logfile)):
@@ -159,6 +239,7 @@ def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False):
                                     read_json(out / "learning.json"), out, no_show=True, make_plots=False)
         if not (out / "model_parametric.nam").is_file():
             raise RuntimeError("Trainer ended without model_parametric.nam. Inspect checkpoints and the log.")
+        finish_exports(out)
     except BaseException as exc:
         (out / "status.json").write_text(json.dumps({"status": "failed_or_interrupted", "error": str(exc)}))
         raise
@@ -168,4 +249,5 @@ def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False):
         print("Evaluate held-out ESR and listen before treating this model as finished.", flush=True)
     finally:
         trainer_module._create_parametric_callbacks = create_callbacks
+        trainer_module._export_parametric = original_export
     return out

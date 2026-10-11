@@ -5,7 +5,7 @@ import sys
 from test_workflow import project
 
 SCRIPT = '''
-import sys, hashlib, shutil
+import sys, hashlib, shutil, json
 from types import SimpleNamespace
 from pathlib import Path
 from PySide6.QtWidgets import QApplication
@@ -21,13 +21,17 @@ assert window.pages.count() == 5
 assert not window.train_button.isEnabled()
 assert not window.capture_next_button.isEnabled()
 assert window.quality_slider.value() == 2
+assert window.model_architecture.currentData() == 'a2-dual'
 assert window.effort_label.text().startswith('40 recordings')
 window.project_dir = Path(sys.argv[1])
+# This legacy test fixture deliberately uses a short, non-A2 network.
+window.model_architecture.setCurrentIndex(window.model_architecture.findData('auto'))
 window.go_to(3)
 window._start('check')
 assert window.process is not None
 assert not window.train_button.isEnabled()
 assert not window.new_button.isEnabled()
+assert not window.model_architecture.isEnabled()
 window.go_to(4)
 assert window.pages.currentIndex() == 4
 assert all(b.isEnabled() for b in window.nav_buttons)
@@ -40,6 +44,7 @@ assert 'Ready for training.' in window.train_log.toPlainText()
 assert window.train_button.isEnabled()
 assert window.new_button.isEnabled()
 assert not window.stop_button.isEnabled()
+assert window.model_architecture.isEnabled()
 # Creating a native manifest automatically copies verified excitation files.
 root = Path(sys.argv[1])
 assets = root / 'assets'
@@ -51,6 +56,24 @@ fresh = root / 'native-project'
 fresh.mkdir()
 window._create_project(fresh, assets)
 assert (fresh / 'input_train.wav').is_file()
+window.model_architecture.setCurrentIndex(window.model_architecture.findData('a2-nano'))
+assert gui.read_state(fresh)['model_architecture'] == 'a2-nano'
+window._open_project(fresh)
+assert window.model_architecture.currentData() == 'a2-nano'
+window.model_architecture.setCurrentIndex(window.model_architecture.findData('film-dual'))
+assert '16 continuous controls' in window.architecture_hint.text()
+assert 'each gets the selected number of epochs' in window.architecture_hint.text()
+window._open_project(fresh)
+assert window.model_architecture.currentData() == 'film-dual'
+original_export = window._export_configs
+window._export_configs = lambda architecture, writer: writer(window.project, window.project_dir)
+window._on_export_concat_configs()
+window._export_configs = original_export
+assert json.loads((fresh / 'model_concat.json').read_text())['net']['name'] == 'parametric_mac.film.init_film'
+assert window.export_concat_button.text() == 'Export training configs'
+window.model_architecture.setCurrentIndex(window.model_architecture.findData('film-nano'))
+assert 'selected model size' in window.architecture_hint.text()
+window.model_architecture.setCurrentIndex(window.model_architecture.findData('auto'))
 window.quality_slider.setValue(0)
 assert window.n_train_spin.value() == 8
 assert window.knob_table.item(0, 3).text() == '2.0'
@@ -113,6 +136,10 @@ run.mkdir(parents=True)
 (run / 'metrics.json').write_text('{"epoch":2,"ESR":0.031}')
 window.go_to(4)
 assert '0.031' in window.review_metric.text()
+(run / 'metrics.json').write_text('{"tiers":{"standard":{"epoch":2,"ESR":0.021},"nano":{"epoch":2,"ESR":0.041}}}')
+window._show_run()
+assert 'Standard: last validation ESR 0.021' in window.review_metric.text()
+assert 'Nano: last validation ESR 0.041' in window.review_metric.text()
 assert window.save_model_button.isEnabled()
 window.review_check.setChecked(True)
 assert (run / 'review.json').is_file()
@@ -184,6 +211,9 @@ for stage in (0, 1, 2, 3, 4):
         assert all(field.height() >= 34 for field in window.control_editor.rows.findChildren(QLineEdit))
     if stage == 1:
         assert window.quality_slider.width() >= 430
+    if stage == 3:
+        assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
+        assert window.training_mode.height() >= window.training_mode.sizeHint().height()
     if stage == 4:
         from parametric_mac.gui import Columns
         columns = page.findChild(Columns)
@@ -201,6 +231,11 @@ for stage in (0, 1, 2, 3, 4):
         next_target = window._next_pending_entry()
         from parametric_mac.controls import format_controls
         assert window.queue_rows.itemAt(0).widget().text().startswith(format_controls(next_target.params, window.project.knob_specs()))
+window.resize(1140, 900)
+window.go_to(3)
+QTest.qWait(80)
+assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
+assert window.training_mode.height() >= window.training_mode.sizeHint().height()
 window.close()
 app.processEvents()
 print('GUI workflow check passed')

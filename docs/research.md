@@ -20,7 +20,17 @@ The public community fork supplies a Qt capture app, dataset format, ConcatWaveN
 
 ConcatWaveNet encodes controls, repeats them over time and concatenates them with audio. These control channels also reach the convolutional conditioning paths. The model config preserves control names, ranges and defaults. We use this architecture first. [Inspected implementation](https://github.com/phillipmself/neural-amp-modeler-parametric/blob/a3684411076be69dab53505df14922487697f2cf/nam/models/parametric/_concat_wavenet.py).
 
+The pinned capture recipe already uses A2's 23-layer kernel/dilation pattern with LeakyReLU and a 16-sample head. Its automatic width grows with control count. The companion offers fixed-width A2 Standard (8 channels) and A2 Nano (3 channels), preserving concat conditioning and learning settings. Individual models remain ConcatWaveNet 1.0.0 exports. Combined mode trains both independently and packages them in an Ardor-compatible SlimmableContainer 1.0.0, with common controls and separate weights/loudness. This is a container extension, rather than shared-weight slimmable training. Ardor's compatibility tests compare the actual exports and both container children with Python inference. [Pinned capture recipe](https://github.com/phillipmself/neural-amp-modeler-parametric/blob/a3684411076be69dab53505df14922487697f2cf/nam/capture/export.py), [NAM's A2 configuration](https://github.com/sdatkinson/neural-amp-modeler/blob/main/nam/train/_resources/config_model_packed.json).
+
 HyperWaveNet generates audio-network weights from the controls. Its runtime and training tradeoffs differ. The fork documents audible artifacts when moving its controls; it is outside this companion's initial training path. [Trainer architecture notes](https://github.com/phillipmself/neural-amp-modeler-parametric#which-architecture).
+
+## FiLM A2 extension
+
+The companion also trains FiLM A2 using a local PyTorch implementation and the same pinned upstream dataset, optimizer, losses, checkpoints and training workflow. Its export contract is pinned to Gene Ko's core revision `419bb5712e651fb7fb548f8aa54431207727aa59`: `ParametricWaveNet` 0.7.0, FiLM schema 1, `head_mode: skip`. Audio enters a mono rechannel and per-layer audio mixin; controls produce separate per-layer scale and shift before LeakyReLU. The head reads the sum of the 23 layers' activations. Playback includes a first-order 20 Hz DC blocker, which the differentiable Python training model includes as well. [Public FiLM contract and weight layout](https://github.com/mrgeneko/NeuralAmpModelerCore/blob/419bb5712e651fb7fb548f8aa54431207727aa59/NAM/wavenet/parametric_wavenet.h).
+
+Training normalizes continuous ranges to [0,1] for optimization, then folds that affine transformation into the exported FiLM matrices so the runtime consumes raw physical values. The supported training profiles use 8-channel Standard and 3-channel Nano, with at most 16 continuous controls. Switch projects keep using concat. This adds a trainable network; it does not convert existing concat weights, modify the upstream checkout, or reproduce Gene Ko's undisclosed training recipe.
+
+Combined FiLM mode trains both sizes independently and emits a 0.7.0 container. Copies of the child output heads are normalized to −18 dB to match each standalone model's normalized playback under the FiLM container's parent-level gain convention. Original per-tier files retain their calibration. The actual trained exports are checked against Ardor's C++ runtime; same-format playback in Gene Ko's player and MPS training still need separate qualification.
 
 ## Capture design we recommend
 
@@ -28,7 +38,7 @@ For a first drive pedal, choose Drive and Tone, keeping the pedal's output Level
 
 Keep validation settings disjoint from training settings. Prefer a different validation DI signal too. This tests both interpolation and response to unseen audio. Listening at several unseen combinations is essential: a low average error can hide a poor corner. Increase capture density where a real pedal and the model disagree. These are our practical recommendations, not the original article's undisclosed experimental design.
 
-The inherited planner exposes continuous knobs only, although the lower-level parametric representation has switch encoding. For this version, make a separate project/model for each fixed switch combination. Combining them into one switch-aware capture project requires extending the planner, schema and UI. [Knob capture implementation](https://github.com/phillipmself/neural-amp-modeler-parametric/blob/a3684411076be69dab53505df14922487697f2cf/nam/capture/params.py).
+The inherited planner exposes continuous knobs only, although the lower-level parametric representation has switch encoding. The companion extends its schema, planner and UI for named switches: each switch combination receives continuous-control captures and unseen validation settings, and exported configs preserve one-hot switch definitions. Keep unmodeled switches fixed. [Knob capture implementation](https://github.com/phillipmself/neural-amp-modeler-parametric/blob/a3684411076be69dab53505df14922487697f2cf/nam/capture/params.py), [companion control implementation](../parametric_mac/controls.py).
 
 ## Mac training
 

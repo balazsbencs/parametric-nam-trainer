@@ -43,13 +43,19 @@ def doctor():
     return 0 if success else 1
 
 
-def project_configs(directory):
+def project_configs(directory, architecture=None):
     directory = Path(directory).expanduser().resolve()
+    from .workflow import read_state
+    selected = architecture if architecture is not None else read_state(directory).get("model_architecture", "auto")
     if (directory / "capture_project.json").exists():
         from .controls import load_project, model_config
         from nam.capture.export import build_data_config
         project = load_project(directory)
-        return build_data_config(project), model_config(project)
+        return build_data_config(project), model_config(project, selected)
+    if selected != "auto":
+        from .architectures import apply_architecture
+        from .checks import read_json
+        return read_json(directory / "data.json"), apply_architecture(read_json(directory / "model_concat.json"), selected)
     return None, None
 
 
@@ -63,12 +69,15 @@ def main(argv=None):
     assets.add_argument("directory", type=Path)
     check = sub.add_parser("check", help="Check a capture project before training")
     check.add_argument("project", type=Path)
-    train = sub.add_parser("train", help="Train ConcatWaveNet from a capture project")
+    from .architectures import ARCHITECTURES
+    check.add_argument("--architecture", choices=tuple(ARCHITECTURES))
+    train = sub.add_parser("train", help="Train a concat or FiLM A2 model from a capture project")
     train.add_argument("project", type=Path)
     train.add_argument("--device", choices=("auto", "mps", "cpu"), default="auto")
     train.add_argument("--epochs", type=int, default=200)
     train.add_argument("--batch", type=int, default=4)
     train.add_argument("--dry-run", action="store_true")
+    train.add_argument("--architecture", choices=tuple(ARCHITECTURES), help="a2-* uses concat; film-* uses FiLM (continuous controls only); *-dual trains Standard + Nano into one file; auto preserves the recipe")
     args = parser.parse_args(argv)
     try:
         if args.command == "doctor":
@@ -78,13 +87,13 @@ def main(argv=None):
             download_inputs(args.directory)
         elif args.command == "check":
             from .checks import check_project
-            data, model = project_configs(args.project)
+            data, model = project_configs(args.project, args.architecture)
             report = check_project(args.project, data, model)
             print(report.text())
             return 0 if report.ok else 1
         elif args.command == "train":
             from .training import run_training
-            run_training(args.project, args.device, args.epochs, args.batch, args.dry_run)
+            run_training(args.project, args.device, args.epochs, args.batch, args.dry_run, args.architecture)
         else:
             from .gui import launch
             return launch(getattr(args, "train_tab", False))
