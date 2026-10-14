@@ -5,7 +5,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 root = Path(__file__).resolve().parents[1]
 out = root / 'dist' / 'parametric-mac.zip'
 out.parent.mkdir(exist_ok=True)
-files = [root / name for name in ('README.md', 'pyproject.toml', '.gitignore',
+files = [root / name for name in ('README.md', 'pyproject.toml', '.python-version', '.gitignore',
           'Install.command', 'Capture.command', 'Train.command', 'PRODUCT.md', 'DESIGN.md')]
 for folder in ('parametric_mac', 'docs', 'tests', 'scripts'):
     files.extend(p for p in (root / folder).rglob('*') if p.is_file() and

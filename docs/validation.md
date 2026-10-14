@@ -1,8 +1,18 @@
 # Validation and first Mac session
 
-## Verified in this workspace
+## uv installer on Apple Silicon (October 14, 2026)
 
-The workspace is Linux x86_64, not an Apple Silicon Mac. Validation uses Python 3.13.5 and a CPU-only PyTorch 2.14.1 wheel against the pinned trainer. Missing Linux Tk/PortAudio dependencies were extracted under `/tmp` for testing; the macOS installer instead uses the native Python installation and sounddevice's Mac distribution.
+The installer completed on native arm64 macOS 25.6 with system Python 3.15.0. uv 0.11.16 created `.venv` using managed Python 3.12.13 with Tk 9.0 and installed the pinned trainer, PyTorch 2.14.1 and PySide6 6.12.0. Both excitation downloads passed their SHA-256 checks. Doctor found all required modules, enumerated CoreAudio devices and passed an actual MPS convolution/backprop check.
+
+The completed installer was also run with `PATH=/usr/bin:/bin`, verifying uv discovery outside `PATH` and reuse of the existing environment. Isolated checks confirmed that an existing Python 3.15 environment and a broken `.venv` symlink are rejected without replacing them; an explicit Python 3.15 override is rejected before environment creation. The version guard remains active under `PYTHONOPTIMIZE=1`. The source ZIP includes `.python-version` and executable launchers, and excludes local environments and the upstream checkout.
+
+The complete existing suite passed on this Mac: **57 tests passed in 70.14 seconds**. This includes real synthetic CPU training/export and the isolated offscreen Qt workflow test. The 20 warnings comprise ten notices that these CPU tests do not use the available GPU and ten upstream Lightning TreeSpec deprecations.
+
+An actual uv resolution probe for Python 3.15 on this Mac failed because PyTorch has no compatible `cp315` wheel. The app runtime therefore remains Python 3.11–3.13, with 3.12 selected by default. Installation works independently of the system Python version. No UMC22 recording or full MPS model training was performed during installer verification. uv bootstrap was not needed because uv was already installed; transitive dependency versions are still not fully locked.
+
+## Previous Linux verification
+
+Earlier validation used Linux x86_64, Python 3.13.5 and a CPU-only PyTorch 2.14.1 wheel against the pinned trainer. Missing Linux Tk/PortAudio dependencies were extracted under `/tmp` for testing; the macOS installer now uses uv-managed Python with Tk and sounddevice's Mac distribution.
 
 The test suite covers audio failures, settings leakage, delay/window semantics, Mac execution settings, preserved source configs, checksummed downloads, separate run folders and native Qt subprocess controls. A one-epoch test runs the real trainer and exports a parametric model. A second exercises the capture app's generated eight-channel architecture, spectral loss and silence anchors, also exporting a model. A third trains a switch-conditioned native manifest and verifies named switch metadata in its exported model. These are synthetic data, not pedal or amp accuracy tests.
 
@@ -12,7 +22,7 @@ The native redesign adds realizable quality presets for one, two and four knobs,
 
 The current five-stage Qt screens were rendered offscreen at **1140×900** and **800×680**, including expanded Advanced, locked plans, quality extremes, a running check, an actual unavailable-MPS error, editable amp controls and amp targets. The evidence contains 20 screenshots. Evidence is under [`.impeccable/review/native`](../.impeccable/review/native); selected native screenshots are under [`screenshots/native`](screenshots/native). These are Linux Qt screenshots, not Mac screenshots. Capture images show pending generated plans; Review uses a genuine synthetic native capture manifest and real CPU export. No hardware was driven during rendering. The next action stays pinned outside each scrolling page; wrapping text advertises height-for-width sizing, so its height follows the available width without fixed minimum-height gaps. The GUI integration test runs in an isolated process like the launcher, avoiding Qt teardown interactions inside the PyTorch/pytest process. A prior combined-process test run had a teardown segmentation fault; the isolated GUI test and standalone render exit cleanly.
 
-Shell launcher syntax is checked with `bash -n`. Both real excitation downloads passed their release SHA-256 checks; each is mono 48 kHz, with 38-second training and 7-second validation audio. The installer itself deliberately refuses Linux, so its macOS execution remains unverified here.
+Shell launcher syntax is checked with `bash -n`. Both real excitation downloads passed their release SHA-256 checks; each is mono 48 kHz, with 38-second training and 7-second validation audio. The installer itself deliberately refuses Linux; macOS execution is covered by the separate uv installer verification above.
 
 The suite emits a PyTorch Lightning deprecation warning about TreeSpec; this does not prevent export. Source configs are pinned to the reviewed trainer revision. Transitive package versions are not fully locked.
 

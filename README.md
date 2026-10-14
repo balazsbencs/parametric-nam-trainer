@@ -10,7 +10,9 @@ The desktop interface now uses the approved mockups’ bundled Inter typography,
 
 ## Install on an Apple Silicon Mac
 
-You need an Apple Silicon Mac, an internet connection for installation, and native **Python 3.12** from [python.org](https://www.python.org/downloads/macos/). Python 3.11–3.13 is supported. Keep Rosetta disabled for Terminal; the installer checks for `arm64`. Python.org includes Tk, which the upstream trainer needs.
+You need an Apple Silicon Mac and an internet connection for installation. The installer uses [uv](https://docs.astral.sh/uv/) to download native **Python 3.12** with Tk and create a local `.venv`. You do not need to install Python manually; your system Python can be **3.15**. Keep Rosetta disabled for Terminal; the installer checks for `arm64`.
+
+The trainer runtime supports Python 3.11–3.13. Python 3.15 cannot run the trainer yet because PyTorch does not publish compatible wheels. `.python-version` selects 3.12 for the app independently of your system Python. If uv is missing, the installer downloads it from Astral into `~/.local/bin` without editing your shell profile. An existing uv installation is reused, including the usual Homebrew and user install locations.
 
 1. Download [this repository as a ZIP](https://github.com/balazsbencs/parametric-nam-trainer/archive/refs/heads/main.zip), unzip it, and move the folder somewhere permanent, such as `~/Projects/parametric-nam-trainer`. Do not run commands from inside the ZIP.
 2. Open Terminal and install Apple's command line tools if needed:
@@ -27,7 +29,7 @@ You need an Apple Silicon Mac, an internet connection for installation, and nati
    ./Install.command
    ```
 
-   The installer creates a local `.venv`, checks out the pinned trainer into `.upstream`, installs dependencies and downloads verified excitation signals into `inputs/`. The ML dependencies are a substantial download. Wait for **Installed. Open Capture.command to begin.**
+   The installer creates a local `.venv` using uv-managed Python, checks out the pinned trainer into `.upstream`, installs dependencies with `uv pip` and downloads verified excitation signals into `inputs/`. The ML dependencies are a substantial download. Wait for **Installed. Open Capture.command to begin.** Existing compatible environments are reused; incompatible environments are preserved with instructions to rename them.
 4. Launch the app:
 
    ```sh
@@ -36,11 +38,13 @@ You need an Apple Silicon Mac, an internet connection for installation, and nati
 
    You can also double-click **Capture.command** in Finder after installation. **Train.command** opens the same app on Train; open your project using the header button.
 
-If the installer selects an older system Python, specify the installed Python explicitly:
+To use your own native Python 3.11–3.13 with Tk instead of uv-managed Python, specify its path when creating the environment:
 
 ```sh
 PARAMETRIC_PYTHON=/Library/Frameworks/Python.framework/Versions/3.12/bin/python3 ./Install.command
 ```
+
+An existing `.venv` takes precedence. To change its Python, close the app, rename `.venv` to keep a backup, and rerun the installer. Unset `PARAMETRIC_PYTHON` to return to automatic Python setup. The launchers use `.venv/bin/python` directly; they do not need uv on your `PATH`.
 
 For a Git checkout instead of a ZIP:
 
@@ -90,14 +94,15 @@ For amp controls, choose **Amp starter** or select **Amp** and build your own la
 
 | Problem | What to do |
 | --- | --- |
-| Python version or architecture error | Install native Python 3.12; use the explicit `PARAMETRIC_PYTHON` command above. Confirm Terminal is running without Rosetta. |
+| Python version, architecture or Tk error | Run `Install.command` with `PARAMETRIC_PYTHON` unset to use uv-managed Python 3.12 with Tk. Rename any incompatible `.venv` first. Confirm Terminal is running without Rosetta. System Python 3.15 is fine; the trainer uses its own runtime. |
+| uv or Python download fails | Check your internet connection and rerun. You can also install uv with `brew install uv` or [Astral's installer](https://docs.astral.sh/uv/getting-started/installation/). |
 | Finder will not open a `.command` file | Launch it from Terminal using `./Capture.command`. For a downloaded file blocked by macOS, use the normal Finder/Open or Privacy & Security flow if you trust the source. |
 | No interface or no input | Connect the UMC22, refresh interfaces and select it in Connect. Allow microphone access for the launching app, usually Terminal or Python, in System Settings → Privacy & Security → Microphone. |
 | Sample-rate warning | Set the UMC22 to 48 kHz in Audio MIDI Setup, then refresh interfaces and test again. |
 | Loopback not detected | Check the optional cable and channels, or disable the optional loopback if you have not wired it. It is off by default. |
 | Silence, clipping or timing QA warnings | Read recording details and the hardware guide. Correct the route; if gain calibration changes, begin a separate project rather than mixing levels. |
 | GPU or memory failure | Use Retry on CPU, or reduce Batch size under Advanced training settings. The original recordings are retained. |
-| Existing `.venv` or `.upstream` rejected by installer | Rename the conflicting directory and rerun. The installer preserves environments of the wrong architecture and trainer checkouts with edits. |
+| Existing `.venv` or `.upstream` rejected by installer | Rename the conflicting directory and rerun. The installer preserves incompatible environments and trainer checkouts with edits or a different revision. |
 
 To inspect dependencies and the Apple GPU:
 
@@ -105,7 +110,7 @@ To inspect dependencies and the Apple GPU:
 .venv/bin/parametric doctor
 ```
 
-The doctor exercises an MPS convolution/backprop operation, not a complete model benchmark. macOS installation, CoreAudio recording and full MPS training still need validation on your actual Mac and pedal; development verification here used Linux and synthetic audio.
+The installer and the doctor's MPS convolution/backprop check have passed on an Apple Silicon Mac using uv-managed Python 3.12, with system Python 3.15. The doctor is not a complete model benchmark. CoreAudio recording and full MPS training still need validation with your hardware and pedal; the training tests use synthetic audio. See the [validation record](docs/validation.md).
 
 ## A2 profiles and Ardor exports
 
