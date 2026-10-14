@@ -14,3 +14,6 @@ parametric = "parametric_mac.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["parametric_mac*"]
+
+[tool.setuptools.package-data]
+parametric_mac = ["ui_assets/*.ttf", "ui_assets/*.svg", "ui_assets/*.txt", "ui_assets/*.md"]

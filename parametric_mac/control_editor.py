@@ -6,6 +6,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPu
     QPlainTextEdit, QDialogButtonBox, QMessageBox, QLayout)
 from nam.capture.params import KnobSpec, validate_knobs
 from .controls import SwitchSpec
+from .theme import icon
+from PySide6.QtCore import QSize
 
 
 def starter(amp=False):
@@ -43,6 +45,10 @@ class ControlEditor(QWidget):
         buttons = QHBoxLayout()
         self.add_knob = QPushButton('Add knob')
         self.add_switch = QPushButton('Add switch')
+        for action in (self.add_knob, self.add_switch):
+            action.setIcon(icon('plus'))
+            action.setIconSize(QSize(14, 14))
+            action.setProperty('quiet', True)
         self.add_knob.clicked.connect(lambda: self.add_control(False))
         self.add_switch.clicked.connect(lambda: self.add_control(True))
         buttons.addWidget(self.add_knob)
@@ -54,6 +60,7 @@ class ControlEditor(QWidget):
     def set_controls(self, controls):
         self.controls = tuple(controls)
         self.scroll.setFixedHeight(min(292, max(92, len(controls)*42 + max(0, len(controls)-1)*6)))
+        self.setFixedHeight(self.scroll.height() + 48)
         while self.rows_layout.count():
             item = self.rows_layout.takeAt(0)
             widget = item.widget()
@@ -75,6 +82,7 @@ class ControlEditor(QWidget):
             settings.setAccessibleName(f'{c.name} settings')
             settings.clicked.connect(lambda checked=False, index=i: self.edit(index))
             remove = QPushButton('Remove')
+            remove.setProperty('quiet', True)
             remove.setAccessibleName(f'Remove {c.name}')
             remove.clicked.connect(lambda checked=False, index=i: self.remove(index))
             layout.addWidget(name, 1)

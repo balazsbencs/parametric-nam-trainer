@@ -4,6 +4,8 @@ Capture pedals or amps at multiple knob and switch settings and train one contro
 
 Plan has one capture-quality slider, with **Good** recommended. The app sets recording counts and knob steps automatically, shows the actual recording effort, and keeps technical settings under Advanced. Quality means capture coverage, not guaranteed sound quality.
 
+The desktop interface now uses the approved mockups’ bundled Inter typography, flat controls, vector routing icons, circular quality slider and physical dial diagrams. Training duration is selected with **Full training / Quick test / Custom** segments; model architecture remains a separate choice. Fonts and icons are included with the application and load locally.
+
 ![Native Plan screen, rendered on Linux](docs/screenshots/native/plan-desktop.png)
 
 ## Install on an Apple Silicon Mac
