@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-10T16:58:01.419850+00:00",
+  "generatedAt": "2026-10-14T10:51:36.227967+00:00",
   "title": "Design System: Parametric native desktop",
   "extensions": {
     "colorMeta": {
@@ -27,6 +27,14 @@
       "caution": {
         "role": "status",
         "displayName": "Readable Caution"
+      },
+      "quiet-ink": {
+        "role": "neutral",
+        "displayName": "Quiet Action Ink"
+      },
+      "dial-surface": {
+        "role": "neutral",
+        "displayName": "Physical Dial Disk"
       }
     },
     "typographyMeta": {
@@ -39,7 +47,7 @@
         "purpose": "Form groups, project header and saved counts."
       },
       "body": {
-        "displayName": "Native body",
+        "displayName": "Bundled Inter body",
         "purpose": "Wrapping instructions and standard controls."
       },
       "quality": {
@@ -48,11 +56,19 @@
       },
       "dial-value": {
         "displayName": "Physical position",
-        "purpose": "QPainter numerical target; QFont.setBold(True)."
+        "purpose": "Read-only QPainter numerical target; Inter SemiBold actual 600 weight."
       },
       "stop-label": {
         "displayName": "Coverage stops",
         "purpose": "Painted five-stop names and hints."
+      },
+      "label": {
+        "displayName": "Supporting labels",
+        "purpose": "Muted instructions and labeled fields."
+      },
+      "button": {
+        "displayName": "Action label",
+        "purpose": "Medium action labels; primary variant uses semibold."
       }
     },
     "shadows": [],
@@ -68,21 +84,24 @@
       "platform": "macOS desktop",
       "toolkit": "PySide6 / Qt",
       "sourceFiles": [
+        "parametric_mac/theme.py",
         "parametric_mac/gui.py",
         "parametric_mac/control_editor.py",
+        "parametric_mac/ui_assets/FONT-SOURCE.md",
         "parametric_mac/controls.py",
         "parametric_mac/workflow.py",
+        "parametric_mac/architectures.py",
         "parametric_mac/training.py"
       ],
-      "tokenSource": "DESIGN.md frontmatter, extracted from current QSS and QPainter code.",
-      "fontFamily": "QApplication default system font; no family override or bundled font.",
+      "tokenSource": "DESIGN.md frontmatter extracted from theme.py QSS, bundled UI assets and gui.py QPainter code.",
+      "fontFamily": "Bundled Inter static Regular 400, Medium 500 and SemiBold 600; installed through QFontDatabase before building the interface.",
       "focus": {
-        "source": "STYLE",
-        "treatment": "2px primary-color border on styled buttons, line edits, selectors, integer fields and slider; native semantics remain."
+        "source": "parametric_mac/theme.py and gui.py: CoverageSlider.paintEvent",
+        "treatment": "1px Action Blue borders on styled fields/buttons; visible checkbox outline; circular slider focus ring. Native semantics and hit testing remain."
       },
       "coverageTrack": {
-        "source": "STYLE QSlider::groove:horizontal",
-        "treatment": "Horizontal gradient using coverage-low, coverage-balanced and coverage-high frontmatter tokens."
+        "source": "parametric_mac/gui.py: CoverageSlider.paintEvent",
+        "treatment": "Three separated rounded segments using coverage-low, coverage-balanced and coverage-high tokens, circular blue handle positioned using Qt subControlRect, muted disabled track/handle."
       },
       "previewPolicy": "Native Qt components have no fabricated HTML/CSS previews. Inspect source and actual screenshots.",
       "tonalRampPolicy": "No tonal ramps invented; only implemented palette primitives are normative.",
@@ -144,8 +163,17 @@
         "formPolicy": "AllNonFixedFieldsGrow; AlignLeft | AlignTop; WrapLongRows",
         "fieldPolicy": "Expanding horizontally, Fixed vertically",
         "targetColumns": "1–3 at 170px per target",
-        "targetRowHeight": 165,
-        "columnStretch": "1 per panel horizontally; 0 vertically when stacked"
+        "targetRowHeight": 190,
+        "columnStretch": "1 per panel horizontally; 0 vertically when stacked",
+        "pageGap": 18,
+        "sidebarInsets": [
+          16,
+          24,
+          16,
+          20
+        ],
+        "controlEditorHeight": "Fixed to current list height + 48px; list remains within 92–292px.",
+        "projectFields": "Labels above controls; Name/Gear share a row, Keep fixed below; output/input audio channels share equal-width fields."
       },
       "controlEditor": {
         "source": "parametric_mac/control_editor.py",
@@ -182,14 +210,44 @@
         "lockPolicy": "Accepted-take lock applies to controls and plan even after captures are cleared."
       },
       "evidenceImageCount": 20,
-      "evidenceDescription": "Five stages at desktop and compact sizes, six additional job/Plan states, and four amp editor/target states. Capture fixtures have pending plans; Review uses an actual synthetic CPU export.",
+      "evidenceDescription": "Twenty actual offscreen images: five stages at desktop/compact sizes, six additional job/Plan states and four amp editor/target states. Current captures include corrected disabled training profiles and error disclosure. Pending capture fixtures; Review uses an actual synthetic CPU export.",
       "validation": {
-        "testsPassed": 43,
-        "seconds": 46.02,
-        "upstreamDeprecationWarnings": 3,
-        "realSyntheticCpuExports": 3,
-        "switchConditionedExportVerified": true,
-        "finishReview": "Fresh verdict: ship. All seven material findings resolved; compact Review uses the intended 28px visible gap. Final full suite: 43 passed in 45.53s with 3 upstream deprecation warnings. Mac/hardware verification remains outside this evidence."
+        "testsPassed": 57,
+        "seconds": 74.45,
+        "upstreamDeprecationWarnings": 10,
+        "finalTargetedGuiTest": "Passed in 30.94s after disabled-profile and error-disclosure synchronization fixes.",
+        "assetPackaging": "Wheel inclusion verified: all 15 bundled UI assets.",
+        "finishReview": "Fresh disposition: ship. Disabled training presets, synchronized error-log disclosure and current persistence documentation are resolved. 15 packaged UI assets verified. Actual Mac/hardware verification remains outside this review."
+      },
+      "fontAssets": {
+        "directory": "parametric_mac/ui_assets",
+        "provenance": "parametric_mac/ui_assets/FONT-SOURCE.md",
+        "license": "parametric_mac/ui_assets/Inter-LICENSE.txt",
+        "runtimeDependencies": "Qt font loading only; no network or fontTools requirement."
+      },
+      "vectorChrome": {
+        "source": "parametric_mac/theme.py and parametric_mac/ui_assets/*.svg",
+        "controls": [
+          "combo arrows",
+          "spin arrows",
+          "checkbox check marks",
+          "disclosure chevrons",
+          "route icons",
+          "add icons"
+        ],
+        "scrollbars": "8px slim handles with no end buttons."
+      },
+      "trainingProfiles": {
+        "source": "parametric_mac/gui.py: TrainingProfiles",
+        "behavior": "Exclusive segmented buttons synchronize the original duration combo, epoch setting, accessible name and note. Full 200 epochs; workflow test 1 epoch; Custom editable. Checked-disabled state remains muted."
+      },
+      "architectureSelector": {
+        "source": "parametric_mac/architectures.py and gui.py",
+        "behavior": "Retains automatic-width, concat A2 Standard + Nano / Standard / Nano and FiLM equivalents; dual training gives each size the selected epoch count."
+      },
+      "disclosures": {
+        "source": "parametric_mac/gui.py: disclosure",
+        "behavior": "SVG right/down chevrons follow checked state and content visibility; errors open the log using that same checked state."
       }
     }
   },
@@ -199,21 +257,21 @@
       "kind": "button",
       "refersTo": "button-primary",
       "description": "Main enabled task, with explicit disabled and focus states.",
-      "source": "parametric_mac/gui.py"
+      "source": "parametric_mac/theme.py; parametric_mac/gui.py"
     },
     {
       "name": "Secondary action",
       "kind": "button",
       "refersTo": "button-secondary",
       "description": "Native bordered secondary action or checkable disclosure.",
-      "source": "parametric_mac/gui.py"
+      "source": "parametric_mac/theme.py; parametric_mac/gui.py"
     },
     {
       "name": "Labeled native field",
       "kind": "input",
       "refersTo": "field",
       "description": "Native line edit, selector or number field; labeled and keyboard accessible.",
-      "source": "parametric_mac/gui.py"
+      "source": "parametric_mac/theme.py; parametric_mac/gui.py"
     },
     {
       "name": "Stage navigation",
@@ -227,42 +285,42 @@
       "kind": "custom",
       "refersTo": "detail-view",
       "description": "Native table or read-only log, usually behind a disclosure.",
-      "source": "parametric_mac/gui.py"
+      "source": "parametric_mac/theme.py; parametric_mac/gui.py"
     },
     {
       "name": "Capture coverage",
       "kind": "custom",
-      "description": "Centered bounded five-stop native slider; selected quality keeps natural width. Good default, Custom manual edits, per-switch-combination coverage and sticky recorded-plan lock.",
+      "description": "Segmented five-stop CoverageSlider with circular handle and Qt-native hit geometry. Good default, Custom manual edits, per-switch-combination coverage and sticky recorded-plan lock.",
       "source": "parametric_mac/gui.py"
     },
     {
       "name": "Physical knob targets",
       "kind": "custom",
-      "description": "Read-only grouped QPainter dials with numerical positions, actual minimum/maximum endpoints, named switch target text and native confirmation.",
+      "description": "Read-only 190px rows of QPainter dial names, open arcs, inner disks, short blue pointers, actual endpoints, semibold values and position captions; switch target text and native confirmation.",
       "source": "parametric_mac/gui.py"
     },
     {
       "name": "Controls editor",
       "kind": "custom",
-      "description": "Readable bounded scrolling rows with editable names, range/position dialogs and direct Add knob, Add switch and Remove actions.",
+      "description": "Fixed-height editor protects 42px scrolling rows; editable names, settings dialogs and quiet vector Add/Remove actions.",
       "source": "parametric_mac/control_editor.py"
     },
     {
-      "name": "Working and reference columns",
+      "name": "Training profiles",
       "kind": "custom",
-      "description": "Equal top-aligned columns that stack at available page width below 780px, with pinned stage actions.",
-      "source": "parametric_mac/gui.py"
+      "description": "Exclusive Full training / Quick test / Custom segmented native buttons, synchronized with actual epochs and duration note; readable checked-disabled state.",
+      "source": "parametric_mac/gui.py: TrainingProfiles; parametric_mac/theme.py"
     },
     {
       "name": "Route and target group",
       "kind": "card",
-      "description": "Pale bordered native instruction group; small corners, no decorative shadow.",
+      "description": "Outlined signal route with caption, compact SVG icon rows and dividers; pale physical-target instruction group, no decorative shadow.",
       "source": "parametric_mac/gui.py"
     }
   ],
   "narrative": {
     "northStar": "Your pedal, captured.",
-    "overview": "The approved direction is a familiar light desktop utility: quiet working surfaces, blue actions, compact task labels and explicit state messages. The user chose the conventional utility in the [original mockups](docs/mockups/DESIGN.md) and requested closer native fidelity after seeing drift on Mac. Retain that commitment as the controls grow from pedals to amp layouts. Its signature remains a read-only physical dial target paired with a numerical position and confirmation before recording.\n\nThis refresh records the built [Qt shell](parametric_mac/gui.py) and [controls editor](parametric_mac/control_editor.py). The historical [workflow mockups](docs/mockups/overview.html) and [Plan proposal](docs/mockups/plan-quality.md) remain approved references. Qt code supplies production tokens; browser fonts, framing and example metrics do not. Evidence and unresolved finish findings belong in the [native handoff](docs/ui-audit/native-design-handoff.md), not in the visual system as new rules.",
+    "overview": "The approved direction is a familiar light desktop utility: quiet working surfaces, blue actions, compact task labels and explicit state messages. The user chose the conventional utility in the [original mockups](docs/mockups/DESIGN.md), then said the native app looked dated beside those approved screenshots. This refinement restores their typography, control chrome and density. Retain that commitment as the controls grow from pedals to amp layouts. Its signature remains a read-only physical dial target paired with a numerical position and confirmation before recording.\n\nThis refresh records the built [native theme](parametric_mac/theme.py), [Qt shell](parametric_mac/gui.py), [controls editor](parametric_mac/control_editor.py) and [bundled UI assets](parametric_mac/ui_assets/FONT-SOURCE.md). The historical [workflow mockups](docs/mockups/overview.html) and [Plan proposal](docs/mockups/plan-quality.md) remain approved references. The approved Inter face is bundled for native use; current Qt code supplies production tokens. Browser framing and example metrics remain reference material. Evidence and unresolved finish findings belong in the [native handoff](docs/ui-audit/native-design-handoff.md), not in the visual system as new rules.",
     "keyCharacteristics": [
       "Five persistent numbered stages with short secondary labels.",
       "Working and reference columns, a centered coverage choice and pinned next actions.",
@@ -298,7 +356,7 @@
     "donts": [
       "**Don't** interpret capture coverage as a guaranteed sound-quality rating.",
       "**Don't** make the physical dial diagram appear interactive or automatic.",
-      "**Don't** copy browser font loading, phone breakpoints or example metrics into native truth.",
+      "**Don't** add runtime font downloads, browser framing, phone breakpoints or example metrics to native truth.",
       "**Don't** imply a completed export has been listened to or validated on real hardware.",
       "**Don't** infer Mac/CoreAudio/MPS/VoiceOver verification from Linux offscreen screenshots."
     ]

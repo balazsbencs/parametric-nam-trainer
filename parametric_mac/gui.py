@@ -8,13 +8,13 @@ import re
 import shutil
 import signal
 import sys
-from PySide6.QtCore import Qt, QProcess, QProcessEnvironment, QTimer, QUrl, QRectF, QPointF
-from PySide6.QtGui import QDesktopServices, QPainter, QPen, QColor, QPalette
+from PySide6.QtCore import Qt, QProcess, QProcessEnvironment, QTimer, QUrl, QRectF, QPointF, QSize
+from PySide6.QtGui import QDesktopServices, QPainter, QPen, QColor, QPalette, QFont
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
     QComboBox, QSpinBox, QPushButton, QPlainTextEdit, QMessageBox, QStackedWidget,
     QScrollArea, QSlider, QCheckBox, QLineEdit, QFileDialog, QTableWidgetItem,
-    QProgressBar, QSizePolicy, QBoxLayout, QLayout,
+    QProgressBar, QSizePolicy, QBoxLayout, QLayout, QToolButton, QButtonGroup, QStyleOptionSlider, QStyle,
 )
 from nam.capture.gui.main import MainWindow, knob_rows_to_specs
 from nam.capture.project import save_project, atomic_write_json
@@ -22,40 +22,10 @@ from .controls import ControlProject as CaptureProject, ControlModel, SwitchSpec
 from .control_editor import ControlEditor, starter
 from nam.capture.session import CaptureSession
 from .assets import FILES
+from .theme import install_typography, style_sheet, icon
 from .workflow import QUALITIES, quality_settings, make_plan, recording_minutes, read_state, write_state
 
 STAGES = ("Connect", "Plan", "Capture", "Train", "Review")
-STYLE = """
-QMainWindow, QScrollArea, QWidget#page { background: #ffffff; color: #252a32; }
-QWidget { font-size: 14px; color: #252a32; }
-QWidget#sidebar { background: #f6f7f9; border-right: 1px solid #e4e6e9; }
-QLabel[role="title"] { font-size: 28px; font-weight: 600; }
-QLabel[role="section"] { font-size: 15px; font-weight: 600; }
-QLabel[role="quality"] { font-size: 28px; font-weight: 600; }
-QLabel[role="muted"] { color: #606773; }
-QLabel[role="target"] { font-size: 32px; font-weight: 600; color: #175cd3; }
-QPushButton { padding: 9px 14px; border: 1px solid #d0d5dd; border-radius: 6px; background: #ffffff; color: #252a32; }
-QPushButton:hover { background: #f1f5fc; }
-QPushButton:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 2px solid #175cd3; }
-QPushButton:disabled { color: #606773; background: #f3f4f6; border-color: #e4e6e9; }
-QPushButton[primary="true"] { background: #175cd3; color: #ffffff; border-color: #175cd3; font-weight: 600; }
-QPushButton[primary="true"]:hover { background: #124db5; }
-QPushButton[primary="true"]:disabled { background: #e8edf5; color: #606773; border-color: #d0d5dd; }
-QPushButton[nav="true"] { text-align: left; background: transparent; border: none; padding: 12px 16px; }
-QPushButton[nav="true"]:checked { background: #eaf1fe; color: #175cd3; font-weight: 600; }
-QPushButton[nav="true"]:focus { border: 2px solid #175cd3; }
-QLineEdit, QComboBox, QSpinBox { background: #ffffff; color: #252a32; border: 1px solid #d0d5dd; border-radius: 5px; padding: 6px; min-height: 22px; }
-QPlainTextEdit, QTableWidget { background: #f8f9fb; color: #252a32; border: 1px solid #e4e6e9; border-radius: 5px; }
-QSlider::groove:horizontal { height: 8px; border-radius: 4px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e2c79e, stop:0.25 #b6d2c1, stop:0.75 #b6d2c1, stop:1 #d3d9e2); }
-QSlider::handle:horizontal { background: #175cd3; border: 3px solid #ffffff; width: 20px; margin: -8px 0; border-radius: 12px; }
-QSlider::groove:horizontal:disabled { background: #e4e6e9; }
-QSlider::handle:horizontal:disabled { background: #929aa6; }
-QSlider:focus { border: 2px solid #175cd3; border-radius: 6px; }
-QStatusBar { background: #f8f9fb; color: #606773; border-top: 1px solid #e4e6e9; }
-QWidget#route { background: #f8f9fb; border: 1px solid #e4e6e9; border-radius: 6px; }
-QProgressBar { background: #f8f9fb; color: #252a32; border: 1px solid #e4e6e9; border-radius: 4px; text-align: center; min-height: 20px; }
-QProgressBar::chunk { background: #b5cbf3; }
-"""
 
 
 def label(text, role=None):
@@ -67,6 +37,10 @@ def label(text, role=None):
     widget.setTextFormat(Qt.PlainText)
     if role:
         widget.setProperty("role", role)
+    if role == 'title':
+        font = widget.font()
+        font.setLetterSpacing(QFont.AbsoluteSpacing, -.6)
+        widget.setFont(font)
     return widget
 
 
@@ -78,15 +52,66 @@ def button(text, callback, primary=False):
 
 
 def disclosure(layout, title, widget):
-    toggle = QPushButton(title)
-    toggle.setStyleSheet("text-align: left; border-radius: 0; border: none; border-top: 1px solid #e4e6e9; padding: 12px 0;")
+    toggle = QToolButton()
+    toggle.setText(title)
+    toggle.setProperty('disclosure', True)
+    toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+    toggle.setIcon(icon('chevron-right'))
+    toggle.setIconSize(QSize(12, 12))
+    toggle.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
     toggle.setCheckable(True)
     toggle.setAccessibleName(title)
     widget.setVisible(False)
-    toggle.toggled.connect(widget.setVisible)
+    def reveal(opened):
+        toggle.setIcon(icon('chevron-down' if opened else 'chevron-right'))
+        widget.setVisible(opened)
+    toggle.toggled.connect(reveal)
     layout.addWidget(toggle)
     layout.addWidget(widget)
     return toggle
+
+
+def field(caption, widget):
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(6)
+    title = label(caption)
+    title.setStyleSheet('font-size: 12px;')
+    title.setBuddy(widget)
+    widget.setAccessibleName(caption)
+    layout.addWidget(title)
+    layout.addWidget(widget)
+    return container
+
+
+class TrainingProfiles(QWidget):
+    def __init__(self, combo):
+        super().__init__()
+        self.setObjectName('profiles')
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(3, 3, 3, 3)
+        layout.setSpacing(2)
+        self.buttons = []
+        self.group = QButtonGroup(self)
+        self.group.setExclusive(True)
+        for i, text in enumerate(('Full training', 'Quick test', 'Custom')):
+            choice = QPushButton(text)
+            choice.setProperty('profile', True)
+            choice.setCheckable(True)
+            choice.setAccessibleName(combo.itemText(i))
+            choice.clicked.connect(lambda checked=False, index=i: combo.setCurrentIndex(index))
+            self.group.addButton(choice, i)
+            layout.addWidget(choice, 1)
+            self.buttons.append(choice)
+        def selected(index):
+            for i, choice in enumerate(self.buttons):
+                choice.setChecked(i == index)
+                choice.setAccessibleName(combo.itemText(i))
+        combo.currentIndexChanged.connect(selected)
+        combo.currentTextChanged.connect(lambda _: selected(combo.currentIndex()))
+        selected(combo.currentIndex())
 
 
 class StageButton(QPushButton):
@@ -95,6 +120,7 @@ class StageButton(QPushButton):
         self.index, self.stage, self.detail = index, stage, detail
         self.setProperty('nav', True)
         self.setCheckable(True)
+        self.setFocusPolicy(Qt.TabFocus)
         self.setMinimumHeight(62)
         self.clicked.connect(callback)
         self.setAccessibleName(f'{stage} stage: {detail}')
@@ -113,7 +139,7 @@ class StageButton(QPushButton):
         painter.setPen(QColor('#ffffff' if active else '#606773'))
         painter.drawText(QRectF(12, 15, 16, 16), Qt.AlignCenter, str(self.index + 1))
         font.setPixelSize(14)
-        font.setBold(active)
+        font.setWeight(QFont.DemiBold if active else QFont.Normal)
         painter.setFont(font)
         painter.setPen(QColor('#175cd3' if active else '#252a32'))
         painter.drawText(QRectF(40, 10, self.width()-46, 22), Qt.AlignLeft | Qt.AlignVCenter, self.stage)
@@ -139,7 +165,7 @@ class Columns(QWidget):
         self.columns = []
         for _ in range(2):
             panel = QWidget()
-            policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+            policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
             policy.setHeightForWidth(True)
             panel.setSizePolicy(policy)
             layout = QVBoxLayout(panel)
@@ -147,7 +173,7 @@ class Columns(QWidget):
             layout.setSpacing(12)
             layout.setSizeConstraint(QLayout.SetNoConstraint)
             layout.setAlignment(Qt.AlignTop)
-            self.box.addWidget(panel, 1)
+            self.box.addWidget(panel, 1, Qt.AlignTop)
             self.columns.append(layout)
         parent_layout.addWidget(self)
 
@@ -185,7 +211,7 @@ class KnobTargets(QWidget):
 
     def _size_targets(self):
         columns = max(1, min(3, self.width() // 170))
-        self.setMinimumHeight(math.ceil(len(self.targets) / columns) * 165)
+        self.setMinimumHeight(math.ceil(len(self.targets) / columns) * 190)
         self.setVisible(bool(self.targets))
         self.updateGeometry()
 
@@ -200,27 +226,66 @@ class KnobTargets(QWidget):
         width = self.width() / columns
         for index, (knob, value) in enumerate(self.targets):
             row, col = divmod(index, columns)
-            center = QPointF(width * (col + .5), row * 165 + 59)
-            painter.setPen(QPen(QColor("#d0d5dd"), 5))
-            painter.drawArc(QRectF(center.x()-42, center.y()-42, 84, 84), 225*16, -270*16)
-            angle = math.radians(225 - 270 * (value - knob.min) / (knob.max - knob.min))
-            painter.setPen(QPen(QColor("#175cd3"), 4, Qt.SolidLine, Qt.RoundCap))
-            painter.drawLine(center, center + QPointF(34 * math.cos(angle), -34 * math.sin(angle)))
+            top = row * 190
+            center = QPointF(width * (col + .5), top + 72)
             font = painter.font()
-            font.setPixelSize(26)
-            font.setBold(True)
+            font.setPixelSize(12)
+            font.setWeight(QFont.DemiBold)
             painter.setFont(font)
-            painter.drawText(QRectF(col*width, row*165+107, width, 33), Qt.AlignCenter, f"{value:g}")
-            font.setPixelSize(14)
-            font.setBold(False)
-            painter.setFont(font)
-            painter.setPen(QColor("#252a32"))
-            painter.drawText(QRectF(col*width, row*165+141, width, 22), Qt.AlignCenter, knob.name)
+            painter.setPen(QColor('#252a32'))
+            painter.drawText(QRectF(col*width, top, width, 20), Qt.AlignCenter, knob.name)
+            painter.setPen(QPen(QColor('#d2ddec'), 1.6))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawArc(QRectF(center.x()-48, center.y()-48, 96, 96), 225*16, -270*16)
+            painter.setBrush(QColor('#f3f6fb'))
+            painter.setPen(QPen(QColor('#d2ddec'), 1.2))
+            painter.drawEllipse(center, 37, 37)
+            angle = math.radians(225 - 270 * (value - knob.min) / (knob.max - knob.min))
+            direction = QPointF(math.cos(angle), -math.sin(angle))
+            painter.setPen(QPen(QColor('#175cd3'), 2.5, Qt.SolidLine, Qt.RoundCap))
+            painter.drawLine(center + direction*20, center + direction*37)
             font.setPixelSize(11)
+            font.setWeight(QFont.Normal)
             painter.setFont(font)
             painter.setPen(QColor('#606773'))
-            painter.drawText(QRectF(center.x()-51, row*165+85, 48, 18), Qt.AlignLeft, f'{knob.min:g}')
-            painter.drawText(QRectF(center.x()+3, row*165+85, 48, 18), Qt.AlignRight, f'{knob.max:g}')
+            painter.drawText(QRectF(center.x()-54, top+112, 45, 18), Qt.AlignLeft, f'{knob.min:g}')
+            painter.drawText(QRectF(center.x()+9, top+112, 45, 18), Qt.AlignRight, f'{knob.max:g}')
+            font.setPixelSize(30)
+            font.setWeight(QFont.DemiBold)
+            painter.setFont(font)
+            painter.setPen(QColor('#252a32'))
+            painter.drawText(QRectF(col*width, top+132, width, 35), Qt.AlignCenter, f'{value:g}')
+            font.setPixelSize(11)
+            font.setWeight(QFont.Normal)
+            painter.setFont(font)
+            painter.setPen(QColor('#606773'))
+            painter.drawText(QRectF(col*width, top+170, width, 18), Qt.AlignCenter, 'Physical knob position')
+
+
+class CoverageSlider(QSlider):
+    def paintEvent(self, event):
+        opt = QStyleOptionSlider()
+        self.initStyleOption(opt)
+        handle = self.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, self)
+        center = handle.center()
+        half = handle.width()/2
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        left, right = half, self.width()-half
+        segment = (right-left-12)/4
+        for start, end, color in [(left,left+segment,'#e2c79e'),
+                                  (left+segment+6,right-segment-6,'#b6d2c1'),
+                                  (right-segment,right,'#d3d9e2')]:
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(color if self.isEnabled() else '#e1e5ec'))
+            painter.drawRoundedRect(QRectF(start,center.y()-3.5,end-start,7),3,3)
+        painter.setBrush(QColor('#175cd3' if self.isEnabled() else '#929aa6'))
+        painter.setPen(QPen(QColor('#ffffff'),3))
+        painter.drawEllipse(QPointF(center),11,11)
+        if self.hasFocus():
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QColor('#175cd3'),1))
+            painter.drawEllipse(QPointF(center),14,14)
 
 
 class QualityStops(QWidget):
@@ -256,6 +321,7 @@ class MacWindow(MainWindow):
         self._run_folder = None
         self._log_buffer = ""
         self._workflow = {}
+        install_typography()
         super().__init__()
         self.setWindowTitle("Parametric — capture & training")
         palette = QPalette()
@@ -274,7 +340,7 @@ class MacWindow(MainWindow):
         for field in self.findChildren((QLineEdit)) + self.findChildren(QComboBox):
             field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.version_label.setText("NAM engine " + self.version_label.text())
-        self.setStyleSheet(STYLE)
+        self.setStyleSheet(style_sheet())
         self.resize(1140, 840)
         self.setMinimumSize(760, 580)
         self._ready = True
@@ -283,6 +349,10 @@ class MacWindow(MainWindow):
         self._mirror_controls()
         self._apply_quality(2)
         self._refresh_all()
+        for progress in self.findChildren(QProgressBar):
+            progress.setTextVisible(False)
+        self.centralWidget().setFocusPolicy(Qt.StrongFocus)
+        self.centralWidget().setFocus(Qt.OtherFocusReason)
 
     def _build_ui(self):
         # Build upstream controls once, then place those exact controls in the new flow.
@@ -305,6 +375,7 @@ class MacWindow(MainWindow):
         self.next_entry_label.hide()
         for warning in (self.no_devices_label, self.sample_rate_warning_label,
                         self.capture_sample_rate_warning_label):
+            warning.setProperty("role", "muted")
             warning.setStyleSheet("color: #925517;")
 
         shell = QWidget()
@@ -315,7 +386,7 @@ class MacWindow(MainWindow):
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(208)
         side = QVBoxLayout(sidebar)
-        side.setContentsMargins(12, 24, 12, 20)
+        side.setContentsMargins(16, 24, 16, 20)
         side.addWidget(label("Parametric", "section"))
         self.sidebar_summary = label("Knobs & switches · mono", "muted")
         side.addWidget(self.sidebar_summary)
@@ -361,6 +432,7 @@ class MacWindow(MainWindow):
             row.addStretch()
             row.addWidget(action)
             self.stage_actions.addWidget(footer)
+        self.stage_actions.setStyleSheet("QStackedWidget { border-top: 1px solid #e1e5ec; }")
         content.addWidget(self.stage_actions)
         self.train_tab = 3  # Kept for the Train.command launch option.
         self.go_to(0)
@@ -394,7 +466,7 @@ class MacWindow(MainWindow):
         page.setObjectName("page")
         layout = QVBoxLayout(page)
         layout.setContentsMargins(8, 24, 8, 24)
-        layout.setSpacing(16)
+        layout.setSpacing(18)
         layout.setAlignment(Qt.AlignTop)
         layout.addWidget(label(title, "title"))
         layout.addWidget(label(intro, "muted"))
@@ -407,17 +479,20 @@ class MacWindow(MainWindow):
         columns = Columns(layout)
         left, right = columns.columns
         left.addWidget(label("Your project", "section"))
-        details = QFormLayout()
+        details = QVBoxLayout()
+        details.setSpacing(12)
         self.pedal_name = QLineEdit("My pedal")
         self.gear_kind = QComboBox()
         self.gear_kind.addItems(["Pedal", "Amp"])
         self.fixed_notes = QLineEdit("Level at 5")
-        # Kept hidden only for compatibility with old scripts; editing uses rows.
         self.knob_names = QLineEdit("Drive, Tone")
         self.knob_names.hide()
-        for text, widget in (("Name", self.pedal_name), ("Gear", self.gear_kind), ("Keep fixed", self.fixed_notes)):
-            widget.setAccessibleName(text)
-            details.addRow(text, widget)
+        identity = QHBoxLayout()
+        identity.setSpacing(12)
+        identity.addWidget(field('Name', self.pedal_name), 3)
+        identity.addWidget(field('Gear', self.gear_kind), 1)
+        details.addLayout(identity)
+        details.addWidget(field('Keep fixed', self.fixed_notes))
         left.addLayout(details)
         left.addSpacing(10)
         left.addWidget(label("Controls to model", "section"))
@@ -425,6 +500,7 @@ class MacWindow(MainWindow):
         self.control_editor = ControlEditor()
         left.addWidget(self.control_editor)
         presets = QHBoxLayout()
+        presets.setContentsMargins(0, 0, 0, 0)
         presets.addWidget(button("Pedal starter", lambda: self._use_starter(False)))
         presets.addWidget(button("Amp starter", lambda: self._use_starter(True)))
         self.starter_actions = QWidget()
@@ -433,11 +509,15 @@ class MacWindow(MainWindow):
         left.addSpacing(10)
         left.addWidget(label("Your recording setup", "section"))
         self.audio_controls = QWidget()
-        form = QFormLayout(self.audio_controls)
+        form = QVBoxLayout(self.audio_controls)
         form.setContentsMargins(0, 0, 0, 0)
-        form.addRow("Audio interface", self.device_combo)
-        form.addRow("Send · output", self.output_channel_spin)
-        form.addRow("Return · input", self.input_channel_spin)
+        form.setSpacing(12)
+        form.addWidget(field('Audio interface', self.device_combo))
+        channels = QHBoxLayout()
+        channels.setSpacing(12)
+        channels.addWidget(field('Send · output', self.output_channel_spin), 1)
+        channels.addWidget(field('Return · input', self.input_channel_spin), 1)
+        form.addLayout(channels)
         left.addWidget(self.audio_controls)
         left.addWidget(self.no_devices_label)
         left.addWidget(self.sample_rate_warning_label)
@@ -451,19 +531,45 @@ class MacWindow(MainWindow):
         left.addWidget(self.route_test_result_label)
         right.addWidget(label("The signal route", "section"))
         route = QWidget()
-        route.setObjectName("route")
+        route.setObjectName("signalRoute")
         signal = QVBoxLayout(route)
-        signal.setContentsMargins(16, 14, 16, 14)
-        signal.setSpacing(18)
+        signal.setContentsMargins(0, 0, 0, 0)
+        signal.setSpacing(0)
+        self.route_caption = label('Capture route · channels 1 → 1')
+        self.route_caption.setObjectName('routeCaption')
+        signal.addWidget(self.route_caption)
         self.route_labels = []
-        for title, explanation in [("UMC22 OUTPUT L", "Line-level send"),
-                                   ("Reamp box", "Set a repeatable instrument level"),
-                                   ("Gear input → output", "Physical knobs and switches"),
-                                   ("UMC22 MIC/LINE 1", "Use the ¼-inch line input")]:
-            title_label, explanation_label = label(title, "section"), label(explanation, "muted")
-            signal.addWidget(title_label)
-            signal.addWidget(explanation_label)
+        for i, (title, explanation) in enumerate([
+                ("UMC22 OUTPUT L", "Line-level send"),
+                ("Reamp box", "Set a repeatable instrument level"),
+                ("Gear input → output", "Physical knobs and switches"),
+                ("UMC22 MIC/LINE 1", "Use the ¼-inch line input")]):
+            route_row = QWidget()
+            route_row.setProperty('routeRow', i < 3)
+            row = QHBoxLayout(route_row)
+            row.setContentsMargins(16, 12, 16, 12)
+            row.setSpacing(12)
+            symbol = QLabel()
+            symbol.setFixedSize(28, 28)
+            symbol.setPixmap(icon(('plug', 'reamp', 'pedal', 'plug')[i]).pixmap(20, 20))
+            symbol.setAlignment(Qt.AlignCenter)
+            symbol.setStyleSheet('border: 1px solid #d2ddec; border-radius: 5px;')
+            row.addWidget(symbol)
+            words = QVBoxLayout()
+            words.setContentsMargins(0, 0, 0, 0)
+            words.setSpacing(4)
+            title_label, explanation_label = label(title, 'section'), label(explanation, 'muted')
+            words.addWidget(title_label)
+            words.addWidget(explanation_label)
+            row.addLayout(words, 1)
+            if i < 3:
+                direction = QLabel()
+                direction.setPixmap(icon('arrow-down').pixmap(16, 16))
+                row.addWidget(direction)
+            signal.addWidget(route_row)
             self.route_labels.append((title_label, explanation_label))
+        self.output_channel_spin.valueChanged.connect(self._update_route_caption)
+        self.input_channel_spin.valueChanged.connect(self._update_route_caption)
         right.addWidget(route)
         self.wiring_note = label("You’ll need a reamp box, audio cables and the pedal’s correct power supply. Set the UMC22 to 48 kHz in Audio MIDI Setup.", "muted")
         right.addWidget(self.wiring_note)
@@ -517,11 +623,11 @@ class MacWindow(MainWindow):
         self.quality_description = label(QUALITIES[2].description, 'muted')
         layout.addWidget(self.quality_description)
         layout.addSpacing(20)
-        self.quality_slider = QSlider(Qt.Horizontal)
+        self.quality_slider = CoverageSlider(Qt.Horizontal)
         self.quality_slider.setRange(0, 4)
         self.quality_slider.setValue(2)
         self.quality_slider.setTickInterval(1)
-        self.quality_slider.setTickPosition(QSlider.TicksBelow)
+        self.quality_slider.setTickPosition(QSlider.NoTicks)
         self.quality_slider.setAccessibleName("Capture quality")
         self.quality_slider.setMinimumHeight(40)
         self.quality_slider.valueChanged.connect(self._apply_quality)
@@ -634,7 +740,12 @@ class MacWindow(MainWindow):
         self.training_mode.addItem("Custom training duration", None)
         self.training_mode.setAccessibleName("Training duration")
         self.training_mode.currentIndexChanged.connect(self._set_duration)
-        options.addWidget(self.training_mode)
+        self.training_mode.hide()
+        self.training_profiles = TrainingProfiles(self.training_mode)
+        options.addWidget(self.training_profiles)
+        self.training_profile_note = label(self.training_mode.currentText(), 'muted')
+        self.training_mode.currentTextChanged.connect(self.training_profile_note.setText)
+        options.addWidget(self.training_profile_note)
         layout.addWidget(label("Model architecture", "section"))
         from .architectures import ARCHITECTURES
         self.model_architecture = QComboBox()
@@ -692,7 +803,7 @@ class MacWindow(MainWindow):
         self.train_log.setMaximumBlockCount(10000)
         self.train_log.setAccessibleName("Training log")
         self.train_log.setMinimumHeight(200)
-        disclosure(reference, "Training log and errors", self.train_log)
+        self.train_log_toggle = disclosure(reference, "Training log and errors", self.train_log)
         self.train_continue = button("Review saved runs", lambda: self.go_to(4))
         layout.addWidget(self.train_continue, alignment=Qt.AlignRight)
 
@@ -891,6 +1002,9 @@ class MacWindow(MainWindow):
         self.fixed_notes.setText('Cabinet / load-box settings fixed' if amp else 'Level at 5')
         self._controls_changed()
         self._save_details()
+
+    def _update_route_caption(self, *args):
+        self.route_caption.setText(f'Capture route · channels {self.output_channel_spin.value()} → {self.input_channel_spin.value()}')
 
     def _gear_changed(self):
         amp = self.gear_kind.currentIndex() == 1
@@ -1282,7 +1396,7 @@ class MacWindow(MainWindow):
             self.train_progress.setValue(100)
         else:
             self.status_label.setText("Job failed. Your recordings are preserved. Open Training log and errors; for GPU or memory errors, retry on CPU.")
-            self.train_log.setVisible(True)
+            self.train_log_toggle.setChecked(True)
             self.retry_button.setVisible(self.command == "train")
         self._reset_process()
         self._refresh_runs()
@@ -1295,7 +1409,7 @@ class MacWindow(MainWindow):
         if self.process and error == QProcess.FailedToStart:
             self.train_log.appendPlainText(self.process.errorString())
             self.status_label.setText("Could not start Python. Run Install.command again.")
-            self.train_log.setVisible(True)
+            self.train_log_toggle.setChecked(True)
             self._reset_process()
 
     def _reset_process(self):

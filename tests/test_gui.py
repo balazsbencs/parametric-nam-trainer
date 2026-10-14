@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
+from PySide6.QtCore import Qt
 from nam.capture.project import save_project, QAModel
 from parametric_mac import gui
 from parametric_mac.gui import MacWindow
@@ -17,6 +18,7 @@ app = QApplication([])
 window = MacWindow()
 window.show()
 app.processEvents()
+assert window.font().family() == 'Inter'
 assert window.pages.count() == 5
 assert not window.train_button.isEnabled()
 assert not window.capture_next_button.isEnabled()
@@ -45,6 +47,22 @@ assert window.train_button.isEnabled()
 assert window.new_button.isEnabled()
 assert not window.stop_button.isEnabled()
 assert window.model_architecture.isEnabled()
+# Failure disclosure follows actual visibility, and the first click collapses it.
+root = Path(sys.argv[1])
+window.project_dir = root / 'missing-project'
+window.go_to(3)
+window._start('check')
+for _ in range(400):
+    if window.process is None:
+        break
+    QTest.qWait(50)
+assert window.process is None
+assert window.train_log_toggle.isChecked()
+assert window.train_log.isVisible()
+QTest.mouseClick(window.train_log_toggle, Qt.LeftButton)
+assert not window.train_log_toggle.isChecked()
+assert not window.train_log.isVisible()
+window.project_dir = root
 # Creating a native manifest automatically copies verified excitation files.
 root = Path(sys.argv[1])
 assets = root / 'assets'
@@ -126,6 +144,12 @@ assert window._workflow['plan_locked']
 window.epochs.setValue(7)
 assert '7 epochs' in window.training_mode.currentText()
 window.training_mode.setCurrentIndex(1)
+assert window.epochs.value() == 1
+QTest.mouseClick(window.training_profiles.buttons[0], Qt.LeftButton)
+assert window.epochs.value() == 200
+QTest.mouseClick(window.training_profiles.buttons[0], Qt.LeftButton)
+assert window.training_profiles.buttons[0].isChecked()
+QTest.mouseClick(window.training_profiles.buttons[1], Qt.LeftButton)
 assert window.epochs.value() == 1
 # Opening a run shows its saved metrics and remembers listening per run.
 run = fresh / 'outputs' / 'example-run'
@@ -213,7 +237,7 @@ for stage in (0, 1, 2, 3, 4):
         assert window.quality_slider.width() >= 430
     if stage == 3:
         assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
-        assert window.training_mode.height() >= window.training_mode.sizeHint().height()
+        assert window.training_profiles.height() >= window.training_profiles.minimumSizeHint().height()
     if stage == 4:
         from parametric_mac.gui import Columns
         columns = page.findChild(Columns)
@@ -235,7 +259,7 @@ window.resize(1140, 900)
 window.go_to(3)
 QTest.qWait(80)
 assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
-assert window.training_mode.height() >= window.training_mode.sizeHint().height()
+assert window.training_profiles.height() >= window.training_profiles.minimumSizeHint().height()
 window.close()
 app.processEvents()
 print('GUI workflow check passed')
