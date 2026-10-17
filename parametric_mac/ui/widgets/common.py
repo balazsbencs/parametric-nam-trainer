@@ -9,6 +9,9 @@ from ...theme import icon
 from ..tokens import DARK, Palette
 
 
+PAGE_MARGIN = 38  # left and right padding of every scrolling page
+
+
 class Themed:
     """Custom-painted widgets take their colors from the current Palette."""
     _palette: Palette = DARK
@@ -188,4 +191,4 @@ class PageScroll(QScrollArea):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         for columns in self.findChildren(Columns):
-            columns.reflow(self.viewport().width() - 16)
+            columns.reflow(self.viewport().width() - 2 * PAGE_MARGIN)

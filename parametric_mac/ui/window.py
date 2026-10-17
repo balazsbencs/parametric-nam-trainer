@@ -10,6 +10,7 @@ from .style import AppearanceController, settings_from_env
 from .shell import ShellMixin
 from .jobs import JobsMixin
 from .project_io import ProjectMixin
+from .pages.start import StartPageMixin
 from .pages.connect import ConnectPageMixin
 from .pages.plan import PlanPageMixin
 from .pages.capture import CapturePageMixin
@@ -17,7 +18,7 @@ from .pages.train import TrainPageMixin
 from .pages.review import ReviewPageMixin
 
 
-class MacWindow(ShellMixin, ProjectMixin, JobsMixin, ConnectPageMixin, PlanPageMixin, CapturePageMixin,
+class MacWindow(ShellMixin, ProjectMixin, JobsMixin, StartPageMixin, ConnectPageMixin, PlanPageMixin, CapturePageMixin,
                 TrainPageMixin, ReviewPageMixin, MainWindow):
     def __init__(self):
         self.process = None

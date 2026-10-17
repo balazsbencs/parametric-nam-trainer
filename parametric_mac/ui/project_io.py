@@ -10,6 +10,7 @@ from ..controls import ControlProject as CaptureProject, ControlModel, load_proj
 from ..control_editor import starter
 from nam.capture.session import CaptureSession
 from ..assets import FILES
+from ..recent import project_status, resume_step
 from ..workflow import read_state, write_state
 
 
@@ -53,6 +54,7 @@ class ProjectMixin:
         save_project(self.project, directory)
         write_state(directory, self._workflow)
         self.status_label.setText("Project created. Connect your pedal and test the connection.")
+        self._remember_project()
         self.go_to_step("connect")
         self._refresh_all()
         self._refresh_preview()
@@ -112,7 +114,8 @@ class ProjectMixin:
         self._refresh_all()
         self._refresh_preview()
         self._refresh_runs()
-        self.go_to_step("train" if project.entries and not project.pending_entries() else "connect")
+        self._remember_project()
+        self.go_to_step(resume_step(project_status(self.project_dir)))
 
     def _route_ready(self):
         return (self._route_fingerprint is not None
