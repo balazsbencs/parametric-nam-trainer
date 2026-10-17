@@ -7,7 +7,7 @@ from parametric_mac.ui.tokens import DARK, LIGHT
 ROOT = Path(__file__).resolve().parents[1]
 HEX = re.compile(r"#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b")
 # Files that still hold old literals; later tasks delete or convert them and shrink this set to empty (Task 12 asserts empty).
-LEGACY_COLOR_FILES = {"parametric_mac/gui.py", "parametric_mac/control_editor.py"}
+LEGACY_COLOR_FILES = {"parametric_mac/control_editor.py"}
 COLOR = re.compile(r"#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b|QColor\(\s*\d|rgba?\(")
 
 
@@ -105,3 +105,25 @@ def test_tinted_assets_falls_back_when_folder_is_not_writable(tmp_path, monkeypa
     blocker.write_text("not a folder")
     monkeypatch.setenv("PARAMETRIC_SETTINGS_DIR", str(blocker))
     assert tinted_assets(DARK) == ASSETS
+
+
+def test_themed_widgets_follow_appearance_changes():
+    from gui_harness import run_gui
+    run_gui("""
+from PySide6.QtWidgets import QApplication, QWidget
+from parametric_mac.ui.style import AppearanceController, settings_from_env
+from parametric_mac.ui.tokens import DARK, LIGHT
+from parametric_mac.ui.widgets.common import Themed, themed
+app = QApplication([])
+controller = AppearanceController(app, settings_from_env())
+controller.set_choice("dark")
+class W(Themed, QWidget):
+    pass
+w = themed(W(), controller)
+assert w._palette is DARK
+controller.set_choice("light")
+assert w._palette is LIGHT
+controller.set_choice("dark")
+assert w._palette is DARK
+print("OK")
+""")
