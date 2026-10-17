@@ -23,11 +23,8 @@ class RecordPageMixin:
         self.record_stack = QStackedWidget()
         self.record_choose = self._record_choose_widget()
         self.record_stack.addWidget(self.record_choose)
-        self._capture_page(stack=self.record_stack)
-        self.record_loop = self.record_stack.widget(1)
-        self.change_level_link = button("Change detail level", self._choose_level_again)
-        self.change_level_link.setProperty("link", True)
-        self.record_loop.widget().layout().insertWidget(2, self.change_level_link, 0, Qt.AlignLeft)
+        self.record_loop = self._build_record_loop()
+        self.record_stack.addWidget(self.record_loop)
         self.pages.addWidget(self.record_stack)
         self._record_footer = QWidget()
         row = QHBoxLayout(self._record_footer)
@@ -155,6 +152,9 @@ class RecordPageMixin:
         self.record_start_button.setVisible(not recording)
         self.capture_continue.setVisible(recording)
         self.change_level_link.setVisible(recording and not self._plan_locked())
+        if recording:
+            # The clicked footer button just hid; without this, focus lands outside the loop and Space misfires.
+            self.record_loop.setFocus(Qt.OtherFocusReason)
 
     # ---- plan (moved from the old Plan page) --------------------------------------------
 
