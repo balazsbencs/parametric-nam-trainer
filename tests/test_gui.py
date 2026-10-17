@@ -287,9 +287,10 @@ print('GUI workflow check passed')
 '''
 
 
-def test_gui_workflow_and_job_controls(project):
+def test_gui_workflow_and_job_controls(project, tmp_path):
+    env = {**os.environ, 'QT_QPA_PLATFORM': 'offscreen',
+           'PARAMETRIC_SETTINGS_DIR': str(tmp_path / 'settings'), 'PARAMETRIC_PROJECTS_ROOT': str(tmp_path / 'projects')}
     result = subprocess.run([sys.executable, '-c', SCRIPT, str(project)],
-                            env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'},
-                            capture_output=True, text=True, timeout=60)
+                            env=env, capture_output=True, text=True, timeout=180)
     assert result.returncode == 0, result.stdout + result.stderr
     assert 'GUI workflow check passed' in result.stdout

@@ -22,7 +22,8 @@ from .controls import ControlProject as CaptureProject, ControlModel, SwitchSpec
 from .control_editor import ControlEditor, starter
 from nam.capture.session import CaptureSession
 from .assets import FILES
-from .theme import install_typography, style_sheet, icon
+from .theme import install_typography, icon
+from .ui.style import AppearanceController, settings_from_env
 from .workflow import QUALITIES, quality_settings, make_plan, recording_minutes, read_state, write_state
 
 STAGES = ("Connect", "Plan", "Capture", "Train", "Review")
@@ -322,16 +323,11 @@ class MacWindow(MainWindow):
         self._log_buffer = ""
         self._workflow = {}
         install_typography()
+        # Created before super().__init__(): upstream builds the pages there, and pages read the palette.
+        self.settings = settings_from_env()
+        self.appearance = AppearanceController(QApplication.instance(), self.settings)
         super().__init__()
         self.setWindowTitle("Parametric — capture & training")
-        palette = QPalette()
-        for role, color in [(QPalette.Window, '#ffffff'), (QPalette.WindowText, '#252a32'),
-                            (QPalette.Base, '#ffffff'), (QPalette.AlternateBase, '#f8f9fb'),
-                            (QPalette.Text, '#252a32'), (QPalette.Button, '#ffffff'),
-                            (QPalette.ButtonText, '#252a32'), (QPalette.Highlight, '#175cd3'),
-                            (QPalette.HighlightedText, '#ffffff')]:
-            palette.setColor(role, QColor(color))
-        self.setPalette(palette)
         # QMacStyle defaults squeeze fields and center forms. Make geometry explicit.
         for form in self.findChildren(QFormLayout):
             form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
@@ -340,7 +336,6 @@ class MacWindow(MainWindow):
         for field in self.findChildren((QLineEdit)) + self.findChildren(QComboBox):
             field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.version_label.setText("NAM engine " + self.version_label.text())
-        self.setStyleSheet(style_sheet())
         self.resize(1140, 840)
         self.setMinimumSize(760, 580)
         self._ready = True
