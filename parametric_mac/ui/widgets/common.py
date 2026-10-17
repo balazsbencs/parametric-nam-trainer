@@ -62,6 +62,16 @@ class Segmented(QWidget):
         return self._buttons[index]
 
 
+def set_style_property(widget, name: str, value) -> None:
+    """Change a property that the style sheet reads, and restyle the widget at once."""
+    if widget.property(name) == value:
+        return
+    widget.setProperty(name, value)
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+    widget.update()
+
+
 def themed(widget, appearance):
     """Give `widget` the current palette and keep it in sync with appearance changes."""
     widget.set_palette(appearance.palette())

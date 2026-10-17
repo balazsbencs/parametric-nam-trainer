@@ -105,16 +105,17 @@ assert not window.capture_next_button.isEnabled()  # no route proof
 assert not window.loopback_check.isChecked()
 # A known route-test result allows recording only after setup confirmations;
 # invalidating the setup removes readiness. No audio hardware is driven here.
-for check in (window.reamp_check, window.monitor_check, window.level_check):
-    check.setChecked(True)
+window._has_device = lambda: True
+window._device_sample_rate = lambda: 48000
+window.wire_check.setChecked(True)
 route = SimpleNamespace(ok=True, loopback_failed=False, loopback_used=False,
     loopback_disagreement=False, crosscheck=None, peak=-16,
     latency=SimpleNamespace(delay=17, peak_delay=17.0))
 window._on_route_test_success(route)
 assert window._route_ready()
-window.monitor_check.setChecked(False)
+window.wire_check.setChecked(False)
 assert not window._route_ready()
-window.monitor_check.setChecked(True)
+window.wire_check.setChecked(True)
 window.confirm_knobs.setChecked(True)
 window.target_label.setText('A different selected setting')
 window._begin_capture(window.project.entries[0])
@@ -220,7 +221,7 @@ window._use_starter(True)
 assert len(window.control_editor.controls) == 7
 assert isinstance(window.control_editor.controls[-1], SwitchSpec)
 assert window.gear_kind.currentText() == 'Amp'
-assert 'Never connect a speaker output' in window.wiring_note.text()
+assert window.amp_warning.text().startswith("Never connect the amp's speaker output")
 assert len(load_project(second).knob_specs()) == 7  # saved draft
 window._open_project(second)
 assert len(window.control_editor.controls) == 7

@@ -82,6 +82,8 @@ QWidget#tiles { background: transparent; }
 QFrame[card="true"] { background: $raised; border: 1px solid $line_strong; border-radius: 10px; }
 QFrame[card="true"][selected="true"] { border: 2px solid $accent_text; }
 QFrame[card="true"]:disabled { background: $panel; }
+QLabel[badge="true"] { border: 1px solid $line_strong; border-radius: 11px; color: $muted; font-size: 11px; font-weight: 600; }
+QLabel[badge="true"][done="true"] { background: $ok; border-color: $ok; color: $on_accent; }
 QFrame[stage="true"] { background: $raised; border: 1px solid $line_strong; border-radius: 10px; }
 QFrame[stage="true"][done="true"] { border-color: $ok; }
 QFrame[alert="error"] { background: $danger_surface; border: 1px solid $danger_border; border-radius: 10px; }
