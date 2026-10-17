@@ -125,3 +125,8 @@ def test_resume_step_for_old_project_review_focus_1(tmp_path):
     assert status.state == "recording" and status.captured == 1
     assert resume_step(status) == "connect"
     assert resume_step(ProjectStatus("new", "", 0, 0)) == "connect"
+
+
+def test_default_inputs_folder_is_the_repository_inputs():
+    from parametric_mac.ui.project_io import DEFAULT_INPUTS
+    assert DEFAULT_INPUTS == Path(__file__).resolve().parents[1] / "inputs"
