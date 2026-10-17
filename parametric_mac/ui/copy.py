@@ -1,4 +1,6 @@
 """Plain-language messages for the main path. No Qt."""
+import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
@@ -56,3 +58,46 @@ def take_message(clipping: bool | None, messages: Sequence[str]) -> TakeMessage:
         details = " ".join(m.rstrip(".") + "." for m in messages)
         return TakeMessage("warning", "Check this take", f"{details} Record it again if the problem stays.")
     return TakeMessage("ok", "Good take", "No clipping, and the timing matched.")
+
+
+@dataclass(frozen=True)
+class EpochPoint:
+    tier: str
+    epoch: int
+    value: float
+
+
+_EPOCH_FINISHED = re.compile(r"Epoch (\d+) finished\. (?:(\w+): )?(.*)")
+_METRIC = re.compile(r"(ESR|val_loss)=([-+0-9.eE]+)")
+
+
+def parse_epoch_finished(line: str) -> EpochPoint | None:
+    """The validation value from a trainer line "Epoch N finished. [tier: ]ESR=…, MSE=…" (ESR, else val_loss)."""
+    match = _EPOCH_FINISHED.search(line)
+    if not match:
+        return None
+    metrics = dict(_METRIC.findall(match.group(3)))
+    value = metrics.get("ESR", metrics.get("val_loss"))
+    if value is None:
+        return None
+    try:
+        return EpochPoint(match.group(2) or "", int(match.group(1)), float(value))
+    except ValueError:
+        return None
+
+
+def check_errors(log: str) -> tuple[str, ...]:
+    """The problems the recording check printed ("ERROR: …" lines, and "Error: …" when the command itself failed)."""
+    prefixes = ("ERROR: ", "Error: ")
+    return tuple(line[len(prefix):].strip() for line in log.splitlines()
+                 for prefix in prefixes if line.startswith(prefix))
+
+
+def minutes_left(epoch_seconds: Sequence[float], epochs_left: int) -> int | None:
+    """Whole minutes left from measured round times (median), or None before two rounds finished."""
+    if len(epoch_seconds) < 2:
+        return None
+    ordered = sorted(epoch_seconds)
+    middle = len(ordered) // 2
+    median = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+    return math.ceil(median * max(0, epochs_left) / 60)

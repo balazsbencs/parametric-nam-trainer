@@ -90,7 +90,7 @@ class ShellMixin:
         self._train_page()
         self._review_page()
         actions = {"start": None, "gear": self._gear_footer, "connect": self.connect_button, "record": self._record_footer,
-                   "train": self.train_continue, "review": self.save_model_button}
+                   "train": self._train_footer, "review": self.save_model_button}
         for key in STEP_KEYS:
             self.footer.add_action(key, actions[key])
 
@@ -128,7 +128,7 @@ class ShellMixin:
                           self.gear_next_button, self.gear_change_link, self.gear_new_link,
                           self.control_editor, self.gear_kind, self.fixed_notes, self.audio_controls,
                           self.route_test_button, self.plan_advanced, *self.quality_cards, *self.more_level_buttons,
-                          self.record_start_button, self.check_button, self.train_button,
+                          self.record_start_button, self.train_button, self.train_expert,
                           self.train_settings, self.capture_next_button, self.change_level_link,
                           self.capture_selected_button, self.check_captures_button,
                           self.clear_captures_button, self.export_concat_button,
@@ -222,9 +222,7 @@ class ShellMixin:
             return
         self.project_title.setText((self.project.name or self.project_dir.name) if self.project else
                                    self.project_dir.name if self.project_dir else "No project open")
-        if self.project:
-            captured, total = len(self.project.captured_entries()), len(self.project.entries)
-            self.train_readiness.setText(f"{captured}/{total} recordings saved. " + ("Ready to check and train." if total and captured == total else "Finish your capture plan first."))
+        self._refresh_train()
         self._refresh_record_loop()
         self._sync_states()
 
@@ -258,12 +256,10 @@ class ShellMixin:
         can_record = not busy and self._route_ready() and not self._current_sample_rate_warnings()
         self.capture_next_button.setEnabled(can_record and self._next_pending_entry() is not None)
         self._sync_record_loop(busy, can_record, complete)
-        self.check_button.setEnabled(not busy and self.project_dir is not None)
         self.model_architecture.setEnabled(not busy)
         # Legacy config-only projects may be checked/trained without a capture manifest.
-        self.train_button.setEnabled(not busy and (complete or (self.project is None and self.project_dir is not None)))
+        self._sync_train(busy, not busy and (complete or (self.project is None and self.project_dir is not None)))
         self.cancel_button.setEnabled(self._worker is not None and self._cancel_token is not None)
-        self.stop_button.setEnabled(self.process is not None and not self.stopping)
         self.review_check.setEnabled(not busy and self._exported_run() is not None)
         self.save_model_button.setEnabled(not busy and self._exported_run() is not None)
         self.footer.set_status(self._status_text())

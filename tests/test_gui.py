@@ -146,14 +146,12 @@ assert not any(c.isEnabled() for c in window.quality_cards)
 assert window._quality == 2
 assert window._workflow['plan_locked']
 window.epochs.setValue(7)
-assert '7 epochs' in window.training_mode.currentText()
-window.training_mode.setCurrentIndex(1)
-assert window.epochs.value() == 1
-QTest.mouseClick(window.training_profiles.buttons[0], Qt.LeftButton)
-assert window.epochs.value() == 200
-QTest.mouseClick(window.training_profiles.buttons[0], Qt.LeftButton)
-assert window.training_profiles.buttons[0].isChecked()
-QTest.mouseClick(window.training_profiles.buttons[1], Qt.LeftButton)
+assert not any(card.selected for card in window.mode_cards)
+window.mode_cards[0].clicked.emit()
+assert window.epochs.value() == 1 and window.mode_cards[0].selected
+window.mode_cards[1].clicked.emit()
+assert window.epochs.value() == 200 and window.mode_cards[1].selected
+window.mode_cards[0].clicked.emit()
 assert window.epochs.value() == 1
 # Opening a run shows its saved metrics and remembers listening per run.
 run = fresh / 'outputs' / 'example-run'
@@ -265,7 +263,7 @@ for stage in ("gear", "connect", "record", "train", "review"):
         assert all(field.height() >= 34 for field in window.control_editor.rows.findChildren(QLineEdit))
     if stage == "train":
         assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
-        assert window.training_profiles.height() >= window.training_profiles.minimumSizeHint().height()
+        assert window.mode_cards[0].height() >= window.mode_cards[0].minimumSizeHint().height()
     if stage == "review":
         from parametric_mac.ui.widgets.common import Columns
         columns = page.findChild(Columns)
@@ -286,7 +284,7 @@ window.resize(1140, 900)
 window.go_to_step("train")
 QTest.qWait(80)
 assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
-assert window.training_profiles.height() >= window.training_profiles.minimumSizeHint().height()
+assert window.mode_cards[0].height() >= window.mode_cards[0].minimumSizeHint().height()
 window.close()
 app.processEvents()
 print('GUI workflow check passed')

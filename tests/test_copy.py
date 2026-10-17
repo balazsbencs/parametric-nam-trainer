@@ -41,3 +41,26 @@ def test_take_messages_never_suggest_changing_levels():
     for message in (clipped, take_message(False, []), warning):
         assert "reamp box output down" not in message.body.lower()
         assert not re.search(r"\bgain\b", message.body.lower()), message.body
+
+
+def test_parse_epoch_finished_lines():
+    from parametric_mac.ui.copy import EpochPoint, parse_epoch_finished
+    assert parse_epoch_finished("Epoch 3 finished. ESR=0.0123, MSE=0.0001") == EpochPoint("", 3, 0.0123)
+    assert parse_epoch_finished("Epoch 203 finished. nano: ESR=0.02, MSE=1e-05") == EpochPoint("nano", 203, 0.02)
+    assert parse_epoch_finished("Epoch 3 finished. standard: val_loss=0.5") == EpochPoint("standard", 3, 0.5)
+    assert parse_epoch_finished("Epoch 3/200 started") is None
+    assert parse_epoch_finished("Epoch 4 finished. ") is None
+
+
+def test_check_errors_and_minutes_left():
+    from parametric_mac.ui.copy import check_errors, minutes_left
+    assert check_errors("x\nERROR: Missing take 3\nWARNING: y\nERROR: Clipped take 9") == ("Missing take 3", "Clipped take 9")
+    assert check_errors("Ready for training.") == ()
+    assert minutes_left([60.0], 5) is None
+    assert minutes_left([60.0, 66.0, 54.0], 10) == 10
+    assert minutes_left([30.0, 30.0], 3) == 2
+
+
+def test_check_errors_reads_cli_exceptions():
+    from parametric_mac.ui.copy import check_errors
+    assert check_errors("Error: capture_project.json is missing\n") == ("capture_project.json is missing",)

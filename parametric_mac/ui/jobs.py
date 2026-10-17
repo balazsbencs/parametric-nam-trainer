@@ -4,7 +4,12 @@ import os
 import re
 import signal
 import sys
+import time
 from PySide6.QtCore import QProcess, QProcessEnvironment, QTimer
+
+from .copy import check_errors, minutes_left, parse_epoch_finished
+
+JOB_OUTPUT_TAIL = 200_000  # characters kept for the failure check; the full text is in the log
 
 
 class JobsMixin:
@@ -25,19 +30,32 @@ class JobsMixin:
         super()._run_worker(call, **kwargs)
         self._sync_states()
 
+    def _start_training_flow(self):
+        """Start training: check the recordings first, then train if the check passes."""
+        if self._busy() or self.project_dir is None:
+            return
+        self.train_alert.hide()
+        self._train_after_check = True
+        self._start("check")
+
     def _start(self, command):
         if self._busy() or self.project_dir is None:
             return
         if command == "train" and self.project and (not self.project.entries or self.project.pending_entries()):
-            self.status_label.setText("Finish recording the plan before training.")
+            self.status_label.setText("Finish recording first.")
             return
         self.stopping = False
         self.command = command
         self._run_folder = None
         self._log_buffer = ""
-        self.retry_button.hide()
+        self._job_output = ""
+        self._epoch_started = []
+        self._tiers_seen = []
+        self.train_alert.hide()
         self.train_progress.setValue(0)
-        self.train_metric.setText("Validation results will appear during training.")
+        self.train_metric.setText("")
+        self.training_chart.clear()
+        self.training_chart.set_total(self.epochs.value())
         process = QProcess(self)
         process.setProcessChannelMode(QProcess.MergedChannels)
         env = QProcessEnvironment.systemEnvironment()
@@ -54,7 +72,11 @@ class JobsMixin:
         process.finished.connect(self._finished)
         process.errorOccurred.connect(self._process_error)
         self.stop_button.setText("Stop check" if command == "check" else "Stop training")
-        self.status_label.setText("Checking recordings…" if command == "check" else "Checking recordings and preparing training…")
+        self.train_stage_title.setText("Checking your recordings…" if command == "check" else "Training")
+        self.train_stage_note.setText("")
+        for value in (self.train_percent, self.train_time_left, self.train_rounds):
+            value.setText("—")
+        self.status_label.setText("")
         self.train_log.appendPlainText(f"\n{command.capitalize()}: {self.project_dir}\n")
         self._sync_states()
         process.start(sys.executable, args)
@@ -62,13 +84,17 @@ class JobsMixin:
     def _read_log(self):
         if not self.process:
             return
-        value = bytes(self.process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        self._handle_log_text(bytes(self.process.readAllStandardOutput()).decode("utf-8", errors="replace"))
+
+    def _handle_log_text(self, value: str) -> None:
+        """Show trainer output in the log, and turn known lines into progress, chart points and run folder."""
         cursor = self.train_log.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
         cursor.insertText(value)
         self.train_log.setTextCursor(cursor)
         self.train_log.ensureCursorVisible()
-        self._log_buffer += value
+        self._job_output = (getattr(self, "_job_output", "") + value)[-JOB_OUTPUT_TAIL:]
+        self._log_buffer = getattr(self, "_log_buffer", "") + value
         lines = self._log_buffer.split("\n")
         self._log_buffer = lines.pop()
         for line in lines:
@@ -76,35 +102,88 @@ class JobsMixin:
                 self._run_folder = Path(line.removeprefix("Run folder: ").strip())
             match = re.search(r"Epoch (\d+)/(\d+) started", line)
             if match:
-                epoch, total = map(int, match.groups())
-                self.train_progress.setValue(int((epoch - 1) / total * 100))
-                self.status_label.setText(f"Training · epoch {epoch} of {total}. You can view other stages while it runs.")
-            if " finished. " in line:
-                self.train_metric.setText(line)
+                self._show_round(*map(int, match.groups()))
+            point = parse_epoch_finished(line)
+            if point is not None:
+                self._show_point(point)
+
+    def _show_round(self, epoch: int, total: int) -> None:
+        starts = getattr(self, "_epoch_started", [])
+        starts.append(time.monotonic())
+        self._epoch_started = starts
+        durations = [b - a for a, b in zip(starts, starts[1:])]
+        left = minutes_left(durations, total - epoch + 1)
+        self.train_progress.setValue(int((epoch - 1) / total * 100))
+        self.train_percent.setText(f"{int((epoch - 1) / total * 100)}%")
+        self.train_rounds.setText(f"{epoch - 1} / {total}")
+        self.train_time_left.setText(f"~{left} min" if left is not None else "—")
+
+    def _show_point(self, point) -> None:
+        self.training_chart.add_point(point)
+        self.train_metric.setText(f"Latest difference: {point.value:.4g} (lower is better)")
+        if point.tier:
+            tiers = self.__dict__.setdefault("_tiers_seen", [])
+            if point.tier not in tiers:
+                tiers.append(point.tier)
+            self.train_stage_title.setText(f"Training · {point.tier.capitalize()} size")
+            self.train_stage_note.setText("Step 1 of 2. The second size comes next." if tiers.index(point.tier) == 0
+                                          else "Step 2 of 2.")
 
     def _finished(self, code, status):
         self._read_log()
-        if self.stopping:
-            self.status_label.setText("Stopped. Check the run folder for saved checkpoints or an export before continuing.")
-        elif code == 0:
-            self.status_label.setText("Recordings passed the checks. You can start training." if self.command == "check" else "Model exported. Open Review to inspect this run and listen.")
-            self.train_progress.setValue(100)
-        else:
-            self.status_label.setText("Job failed. Your recordings are preserved. Open Training log and errors; for GPU or memory errors, retry on CPU.")
-            self.train_log_toggle.setChecked(True)
-            self.retry_button.setVisible(self.command == "train")
+        command, output, stopped = self.command, getattr(self, "_job_output", ""), self.stopping
         self._reset_process()
         self._refresh_runs()
         if self._run_folder:
             index = self.run_combo.findData(str(self._run_folder))
             if index >= 0:
                 self.run_combo.setCurrentIndex(index)
+        self._after_job(command, code, output, stopped)
+
+    def _after_job(self, command: str, code: int, output: str, stopped: bool = False) -> None:
+        """What happens after a check or a training run ends. Kept free of QProcess for tests."""
+        if stopped:
+            self._train_after_check = False
+            self.status_label.setText("Stopped. Your recordings are safe. A run folder may hold a partial result.")
+            return
+        if command == "check":
+            self._after_check(code, output)
+            return
+        if code == 0:
+            self.train_alert.hide()
+            self.train_progress.setValue(100)
+            self.status_label.setText("Your model is ready.")
+            self._sync_states()
+            return
+        # Only the real error: Apple GPU runs also log harmless lines that mention "MPS" or "memory".
+        memory = re.search(r"out of memory", output, re.IGNORECASE) is not None
+        body = ("Training stopped: not enough graphics memory. Your recordings are safe. The CPU is slower but uses less memory."
+                if memory else "Training stopped. Your recordings are safe. Open the log to see why, or try again on the CPU.")
+        self._show_train_failure("Training stopped", body, retry=True)
+
+    def _after_check(self, code: int, output: str) -> None:
+        after = getattr(self, "_train_after_check", False)
+        self._train_after_check = False
+        if code == 0:
+            if after:
+                self._start("train")
+            else:
+                self.status_label.setText("Your recordings passed the check.")
+            return
+        problems = check_errors(output) or ("The check did not pass. Open the log for details.",)
+        self._show_train_failure("Your recordings need attention", "\n".join(problems), retry=False)
+
+    def _show_train_failure(self, title: str, body: str, retry: bool) -> None:
+        self.train_alert.show_message(title, body)
+        self.retry_button.setVisible(retry)
+        self.train_alert_go_record.setVisible(not retry)
+        self.train_log_toggle.setChecked(True)
+        self.status_label.setText("")
 
     def _process_error(self, error):
         if self.process and error == QProcess.FailedToStart:
             self.train_log.appendPlainText(self.process.errorString())
-            self.status_label.setText("Could not start Python. Run Install.command again.")
-            self.train_log_toggle.setChecked(True)
+            self._show_train_failure("Could not start", "Could not start Python. Run Install.command again.", retry=False)
             self._reset_process()
 
     def _reset_process(self):
@@ -123,7 +202,7 @@ class JobsMixin:
             return
         self.stopping = True
         self.stop_button.setEnabled(False)
-        self.status_label.setText("Stopping; allowing time to save. Wait before closing the app…")
+        self.status_label.setText("Stopping. The trainer saves its work first; wait before you close the app…")
         process = self.process
         if os.name == "posix" and process.processId():
             try:

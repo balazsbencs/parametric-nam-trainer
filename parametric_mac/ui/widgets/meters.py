@@ -1,4 +1,5 @@
-"""Level meter and the cable chain drawing."""
+"""Level meter, cable chain and training chart drawings."""
+import math
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
@@ -104,3 +105,66 @@ class CableChain(Themed, QWidget):
             painter.setFont(font)
             painter.setPen(QColor(p.muted))
             painter.drawText(inner, Qt.AlignLeft | Qt.AlignBottom, painter.fontMetrics().elidedText(detail, Qt.ElideRight, int(inner.width())))
+
+
+class TrainingChart(Themed, QWidget):
+    """Validation difference per round, log scale, for the size that is training now."""
+
+    def __init__(self):
+        super().__init__()
+        self._series: dict[str, list[tuple[int, float]]] = {}
+        self.current_tier = ""
+        self._total = 0
+        self.setMinimumHeight(150)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setAccessibleName("Difference from the real gear on test settings, lower is better")
+
+    def clear(self) -> None:
+        self._series, self.current_tier = {}, ""
+        self.update()
+
+    def set_total(self, epochs: int) -> None:
+        self._total = epochs
+        self.update()
+
+    def add_point(self, point) -> None:
+        if point.value <= 0:
+            return
+        self._series.setdefault(point.tier, []).append((point.epoch, point.value))
+        self.current_tier = point.tier
+        self.setAccessibleDescription(f"Latest value {point.value:.4g} at round {point.epoch}")
+        self.update()
+
+    def points(self, tier: str) -> list[tuple[int, float]]:
+        return list(self._series.get(tier, []))
+
+    def paintEvent(self, event):
+        p = self._palette
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        frame = QRectF(0.5, 0.5, self.width() - 1, self.height() - 1)
+        painter.setPen(QPen(QColor(p.line), 1))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(frame, 10, 10)
+        for i in range(1, 4):
+            y = frame.top() + frame.height() * i / 4
+            painter.drawLine(QPointF(frame.left() + 8, y), QPointF(frame.right() - 8, y))
+        series = self._series.get(self.current_tier, [])
+        if len(series) < 1:
+            return
+        points = self._chart_points(series, frame.adjusted(12, 12, -12, -12))
+        painter.setPen(QPen(QColor(p.accent_text), 2))
+        for a, b in zip(points, points[1:]):
+            painter.drawLine(a, b)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(p.accent_text))
+        painter.drawEllipse(points[-1], 4, 4)
+
+    def _chart_points(self, series, area: QRectF) -> list[QPointF]:
+        epochs = [e for e, _ in series]
+        logs = [math.log10(v) for _, v in series]
+        first, last = epochs[0], max(epochs[-1], epochs[0] + 1)
+        low, high = min(logs), max(logs)
+        span = (high - low) or 1.0
+        return [QPointF(area.left() + area.width() * (e - first) / (last - first),
+                        area.top() + area.height() * (high - lg) / span) for e, lg in zip(epochs, logs)]
