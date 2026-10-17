@@ -2,12 +2,13 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QMessageBox, QStackedWidget, QMenu,
+    QWidget, QVBoxLayout, QMessageBox, QStackedWidget, QMenu,
     QScrollArea,
 )
 from ..controls import format_controls
-from .widgets.common import themed, label, button, PageScroll
-from .widgets.shell_bars import Footer, Step, StepBar, TopBar  # noqa: F401  (StepBar is part of this module's API)
+from .widgets.common import PAGE_MARGIN, themed, label, PageScroll
+# StepBar is re-exported: tests and later pages import it from here.
+from .widgets.shell_bars import Footer, Step, StepBar, TopBar  # noqa: F401
 
 # Transitional order: later page tasks edit only this tuple (final: start, gear, connect, record, train, listen).
 STEPS: tuple[Step, ...] = (
@@ -19,6 +20,8 @@ STEPS: tuple[Step, ...] = (
     Step("review", "Review", True),
 )
 STEP_KEYS = tuple(step.key for step in STEPS)
+# Final step names that do not exist yet in the transitional STEPS (removed by Tasks 7, 9 and 12).
+STEP_ALIASES = {"gear": "connect", "record": "capture", "listen": "review"}
 APPEARANCE_CHOICES = (("system", "Match macOS"), ("light", "Light"), ("dark", "Dark"))
 
 
@@ -68,7 +71,7 @@ class ShellMixin:
         outer.addWidget(self.top_bar)
         body = QWidget()
         content = QVBoxLayout(body)
-        content.setContentsMargins(30, 0, 30, 0)
+        content.setContentsMargins(0, 0, 0, 0)
         self.pages = QStackedWidget()
         content.addWidget(self.pages)
         outer.addWidget(body, 1)
@@ -81,7 +84,7 @@ class ShellMixin:
         self.statusBar().messageChanged.connect(lambda text: text and self.footer.set_status(text))
 
     def _build_pages(self):
-        self._start_page()
+        self._build_start_page()
         self._connect_page()
         self._plan_page()
         self._capture_page()
@@ -94,16 +97,6 @@ class ShellMixin:
                    "capture": self.capture_continue, "train": self.train_continue, "review": self.save_model_button}
         for key in STEP_KEYS:
             self.footer.add_action(key, actions[key])
-
-    def _start_page(self):
-        layout = self._page("Parametric", "Capture your pedal or amp at many knob settings and train one model you can still control.")
-        self.new_button = button("New project", self._on_new_project, True)
-        self.open_button = button("Open project", self._on_open_project)
-        row = QHBoxLayout()
-        row.addWidget(self.new_button)
-        row.addWidget(self.open_button)
-        row.addStretch()
-        layout.addLayout(row)
 
     def _build_menus(self):
         group = QActionGroup(self)
@@ -162,7 +155,7 @@ class ShellMixin:
         page = QWidget()
         page.setObjectName("page")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 24, 8, 24)
+        layout.setContentsMargins(PAGE_MARGIN, 24, PAGE_MARGIN, 24)
         layout.setSpacing(18)
         layout.setAlignment(Qt.AlignTop)
         layout.addWidget(label(title, "title"))
@@ -172,11 +165,15 @@ class ShellMixin:
         return layout
 
     def go_to_step(self, key: str) -> None:
+        key = STEP_ALIASES.get(key, key) if key not in STEP_KEYS else key
         self.pages.setCurrentIndex(STEP_KEYS.index(key))
         self.footer.show_step(key)
         if key == "review":
             self._refresh_runs()
+        if key == "start":
+            self._refresh_recent()
         self._refresh_steps()
+        self.footer.set_status(self._status_text())
 
     def go_to(self, index: int) -> None:
         """Old index-based navigation, in STEPS order."""
@@ -212,7 +209,8 @@ class ShellMixin:
         if self._worker:
             return "Audio operation running…"
         if not self.project:
-            return "Go to Start to create or open a project."
+            on_start = hasattr(self, "pages") and self.current_step() == "start"
+            return "" if on_start else "Go to Start to create or open a project."
         return f"{len(self.project.captured_entries())} of {len(self.project.entries)} recordings saved"
 
     def _refresh_all(self):
@@ -285,6 +283,7 @@ class ShellMixin:
         self.review_check.setEnabled(not busy and self._exported_run() is not None)
         self.save_model_button.setEnabled(not busy and self._exported_run() is not None)
         self.footer.set_status(self._status_text())
+        self._sync_recent_rows()
         self._refresh_steps()
         if self.project and self.project.entries and not self._route_ready() and not busy:
             self.capture_hint.setText("Return to Connect: confirm the setup and pass Test connection before recording. "

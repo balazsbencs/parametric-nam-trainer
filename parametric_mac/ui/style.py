@@ -24,6 +24,7 @@ QWidget#sidebar { background: $panel; border-right: 1px solid $line; }
 QWidget#topBar { background: $bg; border-bottom: 1px solid $line; }
 QWidget#footer { background: $bg; border-top: 1px solid $line; }
 QWidget#aside { background: $panel; border-left: 1px solid $line; }
+QWidget#asideRows, QWidget#aside QScrollArea { background: $panel; }
 QPushButton#brand { background: transparent; border: 1px solid transparent; color: $text; font-weight: 600; padding: 2px 4px; }
 QPushButton#brand:hover { color: $accent_text; background: transparent; }
 QPushButton#brand:focus { border-color: $accent_text; }
