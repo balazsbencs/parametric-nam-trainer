@@ -13,6 +13,8 @@ from PySide6.QtTest import QTest
 from PySide6.QtCore import Qt
 from nam.capture.project import save_project, QAModel
 from parametric_mac import gui
+from parametric_mac.ui import project_io
+from parametric_mac.workflow import read_state
 from parametric_mac.gui import MacWindow
 app = QApplication([])
 window = MacWindow()
@@ -69,13 +71,13 @@ assets = root / 'assets'
 assets.mkdir()
 for name in ('inputTrunc.wav', 'validation.wav'):
     shutil.copy2(root / 'input.wav', assets / name)
-gui.FILES = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in assets.iterdir()}
+project_io.FILES = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in assets.iterdir()}
 fresh = root / 'native-project'
 fresh.mkdir()
 window._create_project(fresh, assets)
 assert (fresh / 'input_train.wav').is_file()
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('a2-nano'))
-assert gui.read_state(fresh)['model_architecture'] == 'a2-nano'
+assert read_state(fresh)['model_architecture'] == 'a2-nano'
 window._open_project(fresh)
 assert window.model_architecture.currentData() == 'a2-nano'
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('film-dual'))
@@ -260,7 +262,7 @@ for stage in (0, 1, 2, 3, 4):
         assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
         assert window.training_profiles.height() >= window.training_profiles.minimumSizeHint().height()
     if stage == 4:
-        from parametric_mac.gui import Columns
+        from parametric_mac.ui.widgets.common import Columns
         columns = page.findChild(Columns)
         first, second = [item.parentWidget() for item in columns.columns]
         assert 20 <= second.y() - first.y() - first.height() <= 36

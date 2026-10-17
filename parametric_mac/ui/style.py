@@ -30,9 +30,14 @@ QLabel[role="section"] { font-size: 13px; font-weight: 600; }
 QLabel[role="quality"] { font-size: 28px; font-weight: 600; }
 QLabel[role="muted"] { font-size: 12px; color: $muted; }
 QLabel[role="ok"] { color: $ok; }
-QLabel[role="warn"] { color: $warn; }
 QLabel[role="danger"] { color: $danger; }
 QLabel[role="accent"] { color: $accent_text; }
+QLabel[role="warn"] { font-size: 12px; color: $warn; }
+QLabel[tag="ok"] { color: $ok; background: $ok_surface; padding: 5px 9px; border-radius: 4px; }
+QLabel[tag="accent"] { color: $accent_text; background: $accent_surface; padding: 3px 8px; border-radius: 4px; }
+QLabel[listRow="true"] { padding: 12px 0; border-bottom: 1px solid $line; }
+QLabel[routeSymbol="true"] { border: 1px solid $line_strong; border-radius: 5px; }
+QStackedWidget#stageActions { border-top: 1px solid $line; }
 QPushButton { font-size: 13px; font-weight: 500; padding: 8px 14px; border: 1px solid $line_strong; border-radius: 7px; background: $raised; color: $text; }
 QPushButton:hover { background: $hover; }
 QPushButton:pressed { background: $line; }
