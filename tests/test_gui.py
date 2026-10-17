@@ -18,7 +18,7 @@ app = QApplication([])
 window = MacWindow()
 window.show()
 app.processEvents()
-assert window.font().family() == 'Inter'
+assert window.font().family() == 'Geist'
 assert window.pages.count() == 5
 assert not window.train_button.isEnabled()
 assert not window.capture_next_button.isEnabled()
