@@ -11,6 +11,7 @@ from .shell import ShellMixin
 from .jobs import JobsMixin
 from .project_io import ProjectMixin
 from .pages.start import StartPageMixin
+from .pages.gear import GearPageMixin
 from .pages.connect import ConnectPageMixin
 from .pages.plan import PlanPageMixin
 from .pages.capture import CapturePageMixin
@@ -18,7 +19,7 @@ from .pages.train import TrainPageMixin
 from .pages.review import ReviewPageMixin
 
 
-class MacWindow(ShellMixin, ProjectMixin, JobsMixin, StartPageMixin, ConnectPageMixin, PlanPageMixin, CapturePageMixin,
+class MacWindow(ShellMixin, ProjectMixin, JobsMixin, StartPageMixin, GearPageMixin, ConnectPageMixin, PlanPageMixin, CapturePageMixin,
                 TrainPageMixin, ReviewPageMixin, MainWindow):
     def __init__(self):
         self.process = None
@@ -32,6 +33,7 @@ class MacWindow(ShellMixin, ProjectMixin, JobsMixin, StartPageMixin, ConnectPage
         self._run_folder = None
         self._log_buffer = ""
         self._workflow = {}
+        self._inputs_dir = None  # None: the verified signals in the repository inputs/ folder
         install_typography()
         # Created before super().__init__(): upstream builds the pages there, and pages read the palette.
         self.settings = settings_from_env()

@@ -99,7 +99,7 @@ window.top_bar.brand_button.click()
 assert window.current_step() == "start", window.current_step()
 calls = []
 window._on_open_project = lambda: calls.append("open")
-window._on_new_project = lambda: calls.append("new")
+window._start_new_capture = lambda: calls.append("new")
 file_menu = [m for m in window.menuBar().actions() if m.text() == "File"][0].menu()
 actions = {a.text(): a for a in file_menu.actions()}
 assert actions["Open folder…"].shortcut() == QKeySequence(QKeySequence.Open)

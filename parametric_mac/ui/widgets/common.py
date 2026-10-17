@@ -1,5 +1,5 @@
 """Small shared widgets and layout helpers."""
-from PySide6.QtCore import Qt, QRectF, QSize
+from PySide6.QtCore import Qt, QRectF, QSize, Signal
 from PySide6.QtGui import QPainter, QPen, QColor, QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -19,6 +19,47 @@ class Themed:
     def set_palette(self, palette: Palette) -> None:
         self._palette = palette
         self.update()
+
+
+class Segmented(QWidget):
+    """Two or more exclusive choices that look like one control. API like a QComboBox."""
+
+    currentIndexChanged = Signal(int)
+
+    def __init__(self, options: tuple[str, ...]):
+        super().__init__()
+        self.setObjectName("segmented")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(2, 2, 2, 2)
+        row.setSpacing(2)
+        self._group = QButtonGroup(self)
+        self._group.setExclusive(True)
+        self._buttons = []
+        for index, text in enumerate(options):
+            choice = QPushButton(text)
+            choice.setCheckable(True)
+            choice.setProperty("segment", True)
+            self._group.addButton(choice, index)
+            row.addWidget(choice)
+            self._buttons.append(choice)
+        self._buttons[0].setChecked(True)
+        self._group.idToggled.connect(lambda index, checked: checked and self.currentIndexChanged.emit(index))
+
+    def currentIndex(self) -> int:
+        return self._group.checkedId()
+
+    def setCurrentIndex(self, index: int) -> None:
+        self._buttons[index].setChecked(True)
+
+    def currentText(self) -> str:
+        return self._buttons[self.currentIndex()].text()
+
+    def count(self) -> int:
+        return len(self._buttons)
+
+    def button(self, index: int) -> QPushButton:
+        return self._buttons[index]
 
 
 def themed(widget, appearance):

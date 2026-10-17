@@ -28,7 +28,7 @@ class StepButton(Themed, QPushButton):
         self.setCursor(Qt.PointingHandCursor)
         self.setFlat(True)
         self.setFixedHeight(32)
-        self.setMinimumWidth(self.fontMetrics().horizontalAdvance(title) + 44)
+        self.setMinimumWidth(self.fontMetrics().horizontalAdvance(title) + 36)
         self.setAccessibleName(f"Step {number}: {title}")
         self.setStyleSheet("QPushButton { background: transparent; border: none; }")
 
@@ -79,7 +79,7 @@ class StepBar(QWidget):
         for i, step in enumerate(numbered, start=1):
             if i > 1:
                 line = QLabel()
-                line.setFixedSize(16, 1)
+                line.setFixedSize(10, 1)
                 line.setProperty("stepLine", True)
                 row.addWidget(line, 0, Qt.AlignVCenter)
             button = StepButton(i, step.title)
@@ -141,8 +141,8 @@ class TopBar(QWidget):
         self.setObjectName("topBar")
         self.setAttribute(Qt.WA_StyledBackground, True)
         row = QHBoxLayout(self)
-        row.setContentsMargins(20, 10, 14, 10)
-        row.setSpacing(16)
+        row.setContentsMargins(16, 10, 12, 10)
+        row.setSpacing(10)
         dot = label("●", "accent")
         dot.setAccessibleName("")
         dot.setWordWrap(False)

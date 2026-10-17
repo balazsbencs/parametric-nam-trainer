@@ -70,6 +70,15 @@ QToolButton:hover { background: $hover; color: $text; }
 QToolButton[disclosure="true"] { font-size: 12px; color: $muted; text-align: left; border: none; border-top: 1px solid $line; border-radius: 0; padding: 12px 0; }
 QToolButton[disclosure="true"]:hover { color: $accent_text; background: transparent; }
 QToolButton[disclosure="true"]:focus { border: 1px solid $accent_text; border-radius: 4px; }
+QWidget#segmented { background: $panel; border: 1px solid $line_strong; border-radius: 8px; }
+QPushButton[segment="true"] { background: transparent; border: none; border-radius: 6px; color: $muted; padding: 7px 18px; }
+QPushButton[segment="true"]:hover { color: $text; background: $hover; }
+QPushButton[segment="true"]:checked { background: $accent_fill; color: $on_accent; font-weight: 600; }
+QPushButton[segment="true"]:focus { border: 1px solid $text; }
+QPushButton[addTile="true"] { background: transparent; border: 1px dashed $line_strong; border-radius: 9px; color: $muted; }
+QPushButton[addTile="true"]:hover { border-color: $accent_text; color: $accent_text; background: transparent; }
+QPushButton[addTile="true"]:disabled { color: $line_strong; }
+QWidget#tiles { background: transparent; }
 QFrame[card="true"] { background: $raised; border: 1px solid $line_strong; border-radius: 10px; }
 QFrame[card="true"][selected="true"] { border: 2px solid $accent_text; }
 QFrame[card="true"]:disabled { background: $panel; }
