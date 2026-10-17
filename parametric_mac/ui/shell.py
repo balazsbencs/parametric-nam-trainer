@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QMessageBox, QStackedWidget, QMenu,
     QScrollArea,
 )
-from ..controls import format_controls
 from .widgets.common import PAGE_MARGIN, themed, label, PageScroll
 # StepBar is re-exported: tests and later pages import it from here.
 from .widgets.shell_bars import Footer, Step, StepBar, TopBar  # noqa: F401
@@ -90,9 +89,6 @@ class ShellMixin:
         self._build_record_page()
         self._train_page()
         self._review_page()
-        # Transitional until Task 10: Record keeps one filled button (Record this setting).
-        self.capture_continue.setProperty("primary", False)
-        self.capture_continue.setProperty("outline", True)
         actions = {"start": None, "gear": self._gear_footer, "connect": self.connect_button, "record": self._record_footer,
                    "train": self.train_continue, "review": self.save_model_button}
         for key in STEP_KEYS:
@@ -133,7 +129,7 @@ class ShellMixin:
                           self.control_editor, self.gear_kind, self.fixed_notes, self.audio_controls,
                           self.route_test_button, self.plan_advanced, *self.quality_cards, *self.more_level_buttons,
                           self.record_start_button, self.check_button, self.train_button,
-                          self.train_settings, self.capture_next_button,
+                          self.train_settings, self.capture_next_button, self.change_level_link,
                           self.capture_selected_button, self.check_captures_button,
                           self.clear_captures_button, self.export_concat_button,
                           self.separate_button, self.refresh_devices_button]
@@ -141,7 +137,6 @@ class ShellMixin:
         for spin in (self.n_train_spin, self.n_validation_spin, self.seed_spin):
             spin.valueChanged.connect(self._custom_plan)
         self.include_corners_check.toggled.connect(self._custom_plan)
-        self.confirm_knobs.toggled.connect(self._sync_states)
         self.pedal_name.editingFinished.connect(self._save_details)
         self.fixed_notes.editingFinished.connect(self._save_details)
         self.pedal_name.textChanged.connect(lambda *_: self._refresh_gear(effort=False))
@@ -228,29 +223,9 @@ class ShellMixin:
         self.project_title.setText((self.project.name or self.project_dir.name) if self.project else
                                    self.project_dir.name if self.project_dir else "No project open")
         if self.project:
-            captured = len(self.project.captured_entries())
-            total = len(self.project.entries)
-            self.capture_count.setText(f"{captured} of {total} recordings saved" if total else "Choose a capture quality in Plan.")
-            entry = self._next_pending_entry()
-            self.knob_targets.set_targets(entry, self.project.knob_specs())
-            self.target_label.setText(format_controls(entry.params, self.project.knob_specs()) if entry else "All planned settings recorded" if total else "No setting queued")
-            self.capture_hint.setText(("Unseen test setting" if entry.split == "validation" else "Training setting") + f" · Keep fixed: {self.fixed_notes.text()}" if entry else "Continue to training when the recordings are ready.")
+            captured, total = len(self.project.captured_entries()), len(self.project.entries)
             self.train_readiness.setText(f"{captured}/{total} recordings saved. " + ("Ready to check and train." if total and captured == total else "Finish your capture plan first."))
-        if self.project:
-            entries = [e for e in self._entries_in_display_order() if e.status == 'pending'][:5]
-            while self.queue_rows.count():
-                item = self.queue_rows.takeAt(0)
-                item.widget().hide()
-                item.widget().deleteLater()
-            for i, entry in enumerate(entries):
-                text = format_controls(entry.params, self.project.knob_specs()) + '\n' + (
-                    'Set these positions next' if i == 0 else 'Unseen test setting' if entry.split == 'validation' else 'Training setting')
-                row = label(text, 'muted')
-                row.setProperty('listRow', True)
-                self.queue_rows.addWidget(row)
-            if not entries:
-                self.queue_rows.addWidget(label('All planned takes are saved.' if self.project.entries else 'Create a capture plan to see the next settings.', 'muted'))
-        self.confirm_knobs.setChecked(False)
+        self._refresh_record_loop()
         self._sync_states()
 
     def _refresh_status_bar(self):
@@ -280,15 +255,13 @@ class ShellMixin:
                                           and self._rate_problem() is None)
         self._sync_connect()
         complete = bool(self.project and self.project.entries and not self.project.pending_entries())
-        can_record = not busy and self._route_ready() and self.confirm_knobs.isChecked() and not self._current_sample_rate_warnings()
+        can_record = not busy and self._route_ready() and not self._current_sample_rate_warnings()
         self.capture_next_button.setEnabled(can_record and self._next_pending_entry() is not None)
-        self.capture_selected_button.setEnabled(can_record and self.capture_table.currentRow() >= 0)
-        self.capture_continue.setEnabled(complete)
+        self._sync_record_loop(busy, can_record, complete)
         self.check_button.setEnabled(not busy and self.project_dir is not None)
         self.model_architecture.setEnabled(not busy)
         # Legacy config-only projects may be checked/trained without a capture manifest.
         self.train_button.setEnabled(not busy and (complete or (self.project is None and self.project_dir is not None)))
-        self.confirm_knobs.setEnabled(not busy and bool(self.project and self.project.entries))
         self.cancel_button.setEnabled(self._worker is not None and self._cancel_token is not None)
         self.stop_button.setEnabled(self.process is not None and not self.stopping)
         self.review_check.setEnabled(not busy and self._exported_run() is not None)
@@ -297,9 +270,6 @@ class ShellMixin:
         self._sync_recent_rows()
         self._sync_gear_lock()
         self._refresh_steps()
-        if self.project and self.project.entries and not self._route_ready() and not busy:
-            self.capture_hint.setText("Go to Connect and check the level before recording. "
-                                      + f"Keep fixed: {self.fixed_notes.text()}")
 
     def closeEvent(self, event):
         if self.process or self._worker:

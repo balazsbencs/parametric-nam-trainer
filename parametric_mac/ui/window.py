@@ -14,12 +14,12 @@ from .pages.start import StartPageMixin
 from .pages.gear import GearPageMixin
 from .pages.connect import ConnectPageMixin
 from .pages.record import RecordPageMixin
-from .pages.capture import CapturePageMixin
+from .pages.record_loop import RecordLoopMixin
 from .pages.train import TrainPageMixin
 from .pages.review import ReviewPageMixin
 
 
-class MacWindow(ShellMixin, ProjectMixin, JobsMixin, StartPageMixin, GearPageMixin, ConnectPageMixin, RecordPageMixin, CapturePageMixin,
+class MacWindow(ShellMixin, ProjectMixin, JobsMixin, StartPageMixin, GearPageMixin, ConnectPageMixin, RecordPageMixin, RecordLoopMixin,
                 TrainPageMixin, ReviewPageMixin, MainWindow):
     def __init__(self):
         self.process = None

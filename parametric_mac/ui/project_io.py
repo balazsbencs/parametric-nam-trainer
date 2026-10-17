@@ -31,6 +31,7 @@ class ProjectMixin:
         self.train_progress.setValue(0)
         self.retry_button.hide()
         self._reset_connect()
+        self._reset_record_loop()
         # A new capture never inherits the old project's level or runs.
         self._quality = RECOMMENDED_LEVEL
         self._apply_quality(RECOMMENDED_LEVEL)
@@ -57,6 +58,7 @@ class ProjectMixin:
                           "model_architecture": self.model_architecture.currentData()}
         self._route_fingerprint = None
         self._reset_connect()
+        self._reset_record_loop()
         self.capture_log.clear()
         self.train_log.clear()
         self.train_progress.setValue(0)
@@ -114,6 +116,7 @@ class ProjectMixin:
         self.retry_button.hide()
         self.status_label.setText("Project opened. Check completed recordings before training.")
         self._reset_connect()
+        self._reset_record_loop()
         notes = self._recover_and_reconcile()
         if notes:
             self.capture_feedback.setText("\n".join(notes))

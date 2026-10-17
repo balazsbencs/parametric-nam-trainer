@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from parametric_mac.ui.copy import ROUTE_CLIP_DBFS, level_message, sample_rate_message
@@ -26,3 +27,17 @@ def test_no_umc22_text_in_the_app():
     root = Path(__file__).resolve().parents[1] / "parametric_mac"
     for path in root.rglob("*.py"):
         assert "umc22" not in path.read_text().lower(), path
+
+
+def test_take_messages_never_suggest_changing_levels():
+    from parametric_mac.ui.copy import CLIPPED_BODY, take_message
+    clipped = take_message(True, ["Clipping detected"])
+    assert clipped.kind == "clipped"
+    assert clipped.body == ("This take clipped. Record it again. If it clips again, the level is too high for this pedal. "
+                            "Start a new capture and set a lower level on Connect.") == CLIPPED_BODY
+    assert take_message(False, []).kind == "ok"
+    warning = take_message(False, ["Delay disagreement between loopback and return"])
+    assert warning.kind == "warning" and "Delay disagreement" in warning.body
+    for message in (clipped, take_message(False, []), warning):
+        assert "reamp box output down" not in message.body.lower()
+        assert not re.search(r"\bgain\b", message.body.lower()), message.body

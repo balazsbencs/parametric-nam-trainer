@@ -134,6 +134,34 @@ class ChoiceCard(QFrame):
         super().keyPressEvent(event)
 
 
+class AlertBox(QFrame):
+    """A tinted box with a title, a plain instruction, and optional actions underneath."""
+
+    def __init__(self):
+        super().__init__()
+        self.setProperty("alert", "error")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(4)
+        self._title = label("", "section")
+        self._body = label("")
+        layout.addWidget(self._title)
+        layout.addWidget(self._body)
+        self.actions = QHBoxLayout()
+        self.actions.setContentsMargins(0, 6, 0, 0)
+        layout.addLayout(self.actions)
+        self.hide()
+
+    def show_message(self, title: str, body: str, kind: str = "error") -> None:
+        set_style_property(self, "alert", kind)
+        self._title.setText(title)
+        self._body.setText(body)
+        self.show()
+
+    def body_text(self) -> str:
+        return self._body.text()
+
+
 def set_style_property(widget, name: str, value) -> None:
     """Change a property that the style sheet reads, and restyle the widget at once."""
     if widget.property(name) == value:

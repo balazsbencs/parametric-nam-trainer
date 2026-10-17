@@ -116,11 +116,11 @@ assert window._route_ready()
 window.wire_check.setChecked(False)
 assert not window._route_ready()
 window.wire_check.setChecked(True)
-window.confirm_knobs.setChecked(True)
-window.target_label.setText('A different selected setting')
+# Record only captures the shown setting: a different entry is shown first, never recorded blind.
+window._shown_entry = window.project.entries[1]
 window._begin_capture(window.project.entries[0])
 assert window._worker is None
-assert not window.confirm_knobs.isChecked()  # cannot mislabel a pending take
+assert window._shown_entry is window.project.entries[0]
 # Manual sampling is visibly custom; the slider restores complete defaults.
 window.n_train_spin.setValue(9)
 assert window._quality is None and not any(c.selected for c in window.quality_cards)
@@ -277,12 +277,11 @@ for stage in ("gear", "connect", "record", "train", "review"):
         assert 20 <= visible_gap <= 40, visible_gap
     if stage == "record":
         import math
-        cols = max(1, min(3, window.knob_targets.width() // 170))
-        assert window.knob_targets.height() >= math.ceil(len(window.knob_targets.targets)/cols)*165
+        assert window.knob_targets.height() >= window.knob_targets.required_height() > 0
         assert window.capture_hint.y() >= window.knob_targets.y() + window.knob_targets.height()
         next_target = window._next_pending_entry()
         from parametric_mac.controls import format_controls
-        assert window.queue_rows.itemAt(0).widget().text().startswith(format_controls(next_target.params, window.project.knob_specs()))
+        assert window.target_label.text() == format_controls(next_target.params, window.project.knob_specs())
 window.resize(1140, 900)
 window.go_to_step("train")
 QTest.qWait(80)

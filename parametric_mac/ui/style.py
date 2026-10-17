@@ -89,6 +89,8 @@ QFrame[stage="true"] { background: $raised; border: 1px solid $line_strong; bord
 QFrame[stage="true"][done="true"] { border-color: $ok; }
 QFrame[alert="error"] { background: $danger_surface; border: 1px solid $danger_border; border-radius: 10px; }
 QFrame[alert="error"] QLabel { color: $text; }
+QFrame[alert="warning"] { background: $warn_surface; border: 1px solid $line_strong; border-radius: 10px; }
+QFrame[alert="warning"] QLabel { color: $text; }
 QFrame[tag="accent"] { background: $accent_surface; border-radius: 4px; }
 QFrame[tag="ok"] { background: $ok_surface; border-radius: 4px; }
 QFrame[tag="warn"] { background: $warn_surface; border-radius: 4px; }

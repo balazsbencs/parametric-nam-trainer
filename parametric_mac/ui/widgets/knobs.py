@@ -1,6 +1,8 @@
 """Physical knob target drawing."""
 import math
 import re
+from collections.abc import Mapping
+from typing import Literal
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QPainter, QPen, QColor, QFont
 from PySide6.QtWidgets import (
@@ -10,72 +12,133 @@ from ...controls import SwitchSpec
 from .common import Themed
 
 
-class KnobTargets(Themed, QWidget):
-    """Read-only physical dial positions, never software controls."""
+Tier = Literal["large", "medium", "compact"]
+# (cell width, cell height, dial size, value font px) per tier
+TIER_SIZES = {"large": (210, 214, 104, 32), "medium": (160, 168, 72, 24), "compact": (118, 116, 40, 16)}
+MAX_PER_ROW = 4
+
+
+def changed_controls(previous: Mapping[str, float] | None, current: Mapping[str, float]) -> frozenset[str]:
+    """Names whose target moved since the last take. Everything is "changed" for the first take."""
+    if previous is None:
+        return frozenset(current)
+    return frozenset(name for name, value in current.items() if previous.get(name) != value)
+
+
+def size_tier(count: int) -> Tier:
+    return "large" if count <= 2 else "medium" if count <= 6 else "compact"
+
+
+class TargetControls(Themed, QWidget):
+    """The positions to set for the next take: dials for knobs, position names for switches."""
+
     def __init__(self):
         super().__init__()
-        self.targets = []
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        self.setAccessibleName("Physical knob positions")
+        self.targets: list = []
+        self.changed: frozenset[str] = frozenset()
+        self.tier: Tier = "large"
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-    def set_targets(self, entry, knobs):
-        self.targets = [(k, entry.params[k.name]) for k in knobs if not isinstance(k, SwitchSpec)] if entry else []
-        self.setAccessibleDescription(", ".join(f"{k.name} {v:g}, range {k.min:g} to {k.max:g}" for k, v in self.targets))
-        self._size_targets()
+    def set_targets(self, entry, controls, changed: frozenset[str] = frozenset()) -> None:
+        params = entry.params if entry is not None else {}
+        self.targets = [(c, params[c.name]) for c in controls if c.name in params]
+        self.changed = frozenset(changed)
+        self.tier = size_tier(len(self.targets))
+        self.setAccessibleDescription(", ".join(
+            f"{c.name} {self._value_text(c, v)}" + (" (changed)" if c.name in self.changed else "") for c, v in self.targets))
+        self._size()
         self.update()
 
-    def _size_targets(self):
-        columns = max(1, min(3, self.width() // 170))
-        self.setMinimumHeight(math.ceil(len(self.targets) / columns) * 190)
+    def _columns(self) -> int:
+        cell = TIER_SIZES[self.tier][0]
+        return max(1, min(MAX_PER_ROW, len(self.targets) or 1, self.width() // cell or 1))
+
+    def required_height(self) -> int:
+        return math.ceil(len(self.targets) / self._columns()) * TIER_SIZES[self.tier][1] if self.targets else 0
+
+    def _size(self) -> None:
+        self.setFixedHeight(self.required_height())
         self.setVisible(bool(self.targets))
-        self.updateGeometry()
 
     def resizeEvent(self, event):
-        self._size_targets()
         super().resizeEvent(event)
+        if self.height() != self.required_height():
+            self._size()
+
+    @staticmethod
+    def _value_text(control, value) -> str:
+        if isinstance(control, SwitchSpec):
+            names = control.enum_names
+            return names[int(value)] if 0 <= int(value) < len(names) else f"{value:g}"
+        return f"{value:g}"
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        p = self._palette
-        columns = max(1, min(3, self.width() // 170))
+        columns = self._columns()
+        cell_w, cell_h, _, _ = TIER_SIZES[self.tier]
         width = self.width() / columns
-        for index, (knob, value) in enumerate(self.targets):
+        for index, (control, value) in enumerate(self.targets):
             row, col = divmod(index, columns)
-            top = row * 190
-            center = QPointF(width * (col + .5), top + 72)
-            font = painter.font()
-            font.setPixelSize(12)
-            font.setWeight(QFont.DemiBold)
-            painter.setFont(font)
-            painter.setPen(QColor(p.text))
-            painter.drawText(QRectF(col*width, top, width, 20), Qt.AlignCenter, knob.name)
-            painter.setPen(QPen(QColor(p.line_strong), 1.6))
-            painter.setBrush(Qt.NoBrush)
-            painter.drawArc(QRectF(center.x()-48, center.y()-48, 96, 96), 225*16, -270*16)
-            painter.setBrush(QColor(p.raised))
-            painter.setPen(QPen(QColor(p.line_strong), 1.2))
-            painter.drawEllipse(center, 37, 37)
-            angle = math.radians(225 - 270 * (value - knob.min) / (knob.max - knob.min))
-            direction = QPointF(math.cos(angle), -math.sin(angle))
-            painter.setPen(QPen(QColor(p.accent_text), 2.5, Qt.SolidLine, Qt.RoundCap))
-            painter.drawLine(center + direction*20, center + direction*37)
-            font.setPixelSize(11)
-            font.setWeight(QFont.Normal)
-            painter.setFont(font)
-            painter.setPen(QColor(p.muted))
-            painter.drawText(QRectF(center.x()-54, top+112, 45, 18), Qt.AlignLeft, f'{knob.min:g}')
-            painter.drawText(QRectF(center.x()+9, top+112, 45, 18), Qt.AlignRight, f'{knob.max:g}')
-            font.setPixelSize(30)
-            font.setWeight(QFont.DemiBold)
-            painter.setFont(font)
-            painter.setPen(QColor(p.text))
-            painter.drawText(QRectF(col*width, top+132, width, 35), Qt.AlignCenter, f'{value:g}')
-            font.setPixelSize(11)
-            font.setWeight(QFont.Normal)
-            painter.setFont(font)
-            painter.setPen(QColor(p.muted))
-            painter.drawText(QRectF(col*width, top+170, width, 18), Qt.AlignCenter, 'Physical knob position')
+            self._paint_cell(painter, QRectF(col * width, row * cell_h, width, cell_h), control, value)
+
+    def _paint_cell(self, painter, cell: QRectF, control, value) -> None:
+        p = self._palette
+        _, _, dial, value_px = TIER_SIZES[self.tier]
+        changed = control.name in self.changed
+        font = painter.font()
+        font.setPixelSize(12 if self.tier != "compact" else 11)
+        font.setWeight(QFont.DemiBold)
+        painter.setFont(font)
+        painter.setPen(QColor(p.accent_text if changed else p.muted))
+        name = control.name + ("  · changed" if changed else "")
+        painter.drawText(QRectF(cell.left() + 4, cell.top(), cell.width() - 8, 18), Qt.AlignCenter,
+                         painter.fontMetrics().elidedText(name, Qt.ElideRight, int(cell.width() - 8)))
+        center = QPointF(cell.center().x(), cell.top() + 22 + dial / 2)
+        if isinstance(control, SwitchSpec):
+            self._paint_switch(painter, center, dial, control, value)
+        else:
+            self._paint_dial(painter, center, dial, control, value)
+        font.setPixelSize(value_px)
+        font.setFamily("Geist Mono")
+        painter.setFont(font)
+        painter.setPen(QColor(p.text))
+        top = center.y() + dial / 2 + 4
+        painter.drawText(QRectF(cell.left(), top, cell.width(), value_px + 8), Qt.AlignCenter,
+                         painter.fontMetrics().elidedText(self._value_text(control, value), Qt.ElideRight, int(cell.width() - 4)))
+
+    def _paint_dial(self, painter, center: QPointF, size: int, control, value) -> None:
+        p = self._palette
+        radius = size / 2
+        span = (control.max - control.min) or 1
+        fraction = max(0.0, min(1.0, (value - control.min) / span))
+        ring = QRectF(center.x() - radius, center.y() - radius, size, size)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(p.line_strong), 2))
+        painter.drawArc(ring, 225 * 16, -270 * 16)
+        painter.setPen(QPen(QColor(p.accent_text), 2.5, Qt.SolidLine, Qt.RoundCap))
+        painter.drawArc(ring, 225 * 16, int(-270 * 16 * fraction))
+        painter.setPen(QPen(QColor(p.line_strong), 1))
+        painter.setBrush(QColor(p.raised))
+        painter.drawEllipse(center, radius * 0.72, radius * 0.72)
+        angle = math.radians(225 - 270 * fraction)
+        direction = QPointF(math.cos(angle), -math.sin(angle))
+        painter.setPen(QPen(QColor(p.text), max(2.0, size / 40), Qt.SolidLine, Qt.RoundCap))
+        painter.drawLine(center + direction * radius * 0.25, center + direction * radius * 0.65)
+
+    def _paint_switch(self, painter, center: QPointF, size: int, control, value) -> None:
+        p = self._palette
+        positions = max(2, len(control.enum_names))
+        height, width = size * 0.9, size * 0.32
+        body = QRectF(center.x() - width / 2, center.y() - height / 2, width, height)
+        painter.setPen(QPen(QColor(p.line_strong), 1))
+        painter.setBrush(QColor(p.panel))
+        painter.drawRoundedRect(body, width / 2, width / 2)
+        step = (height - width) / (positions - 1)
+        knob_y = body.top() + width / 2 + step * max(0, min(positions - 1, int(value)))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(p.accent_text))
+        painter.drawEllipse(QPointF(center.x(), knob_y), width * 0.36, width * 0.36)
 
 
 class ControlGlyph(Themed, QWidget):
