@@ -236,35 +236,6 @@ def field(caption, widget):
     return container
 
 
-class TrainingProfiles(QWidget):
-    def __init__(self, combo):
-        super().__init__()
-        self.setObjectName('profiles')
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(3, 3, 3, 3)
-        layout.setSpacing(2)
-        self.buttons = []
-        self.group = QButtonGroup(self)
-        self.group.setExclusive(True)
-        for i, text in enumerate(('Full training', 'Quick test', 'Custom')):
-            choice = QPushButton(text)
-            choice.setProperty('profile', True)
-            choice.setCheckable(True)
-            choice.setAccessibleName(combo.itemText(i))
-            choice.clicked.connect(lambda checked=False, index=i: combo.setCurrentIndex(index))
-            self.group.addButton(choice, i)
-            layout.addWidget(choice, 1)
-            self.buttons.append(choice)
-        def selected(index):
-            for i, choice in enumerate(self.buttons):
-                choice.setChecked(i == index)
-                choice.setAccessibleName(combo.itemText(i))
-        combo.currentIndexChanged.connect(selected)
-        combo.currentTextChanged.connect(lambda _: selected(combo.currentIndex()))
-        selected(combo.currentIndex())
-
-
 class StageButton(Themed, QPushButton):
     def __init__(self, index, stage, detail, callback):
         super().__init__()
