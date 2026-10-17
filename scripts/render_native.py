@@ -34,14 +34,14 @@ for name, size in [('desktop', (1140, 900)), ('compact', (800, 680))]:
             window.project_title.setText('Synthetic trainer verification')
         elif window.project_dir != folder:
             window._open_project(folder)
-        window.go_to(index)
+        window.go_to_step(stage)
         app.processEvents()
         QTest.qWait(80)
         path = out / f'{stage}-{name}.png'
         window.grab().save(str(path))
         files.append(str(path.relative_to(root)))
 window.resize(1140, 900)
-window.go_to(3)
+window.go_to_step("train")
 window._start('check')
 app.processEvents()
 window.grab().save(str(out / 'check-running-desktop.png'))
@@ -61,7 +61,7 @@ assert window.process is None
 app.processEvents()
 window.grab().save(str(out / 'train-error-desktop.png'))
 window._open_project(folder)
-window.go_to(1)
+window.go_to_step("plan")
 window.plan_advanced_toggle.setChecked(True)
 window.resize(800, 680)
 app.processEvents()
@@ -75,7 +75,7 @@ for level, name in ((0, 'quick'), (4, 'overkill')):
     app.processEvents()
     window.grab().save(str(out / f'plan-{name}-desktop.png'))
 window._open_project(args.run_project)
-window.go_to(1)
+window.go_to_step("plan")
 app.processEvents()
 window.grab().save(str(out / 'plan-locked-desktop.png'))
 # Amp layout and switch targets use a genuinely planned pending project.
@@ -86,8 +86,8 @@ window.quality_slider.setValue(0)
 window._commit_plan()
 for name, size in [('desktop', (1140, 900)), ('compact', (800, 680))]:
     window.resize(*size)
-    for stage, index in [('amp-controls', 0), ('amp-targets', 2)]:
-        window.go_to(index)
+    for stage, index in [('amp-controls', 'connect'), ('amp-targets', 'capture')]:
+        window.go_to_step(index)
         app.processEvents()
         QTest.qWait(80)
         path = out / f'{stage}-{name}.png'

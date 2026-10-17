@@ -225,7 +225,7 @@ class PlanPageMixin:
         if self._busy() or self.project_dir is None:
             return
         if self._plan_locked():
-            self.go_to(2)
+            self.go_to_step("capture")
             return
         self._refresh_preview()
         if self._preview is None:
@@ -243,4 +243,4 @@ class PlanPageMixin:
         self._workflow.update(quality=self._quality, fixed_notes=self.fixed_notes.text(), plan_locked=False, gear_kind="amp" if self.gear_kind.currentIndex() else "pedal")
         write_state(self.project_dir, self._workflow)
         self._refresh_all()
-        self.go_to(2)
+        self.go_to_step("capture")

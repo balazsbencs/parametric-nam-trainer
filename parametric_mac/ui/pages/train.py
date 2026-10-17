@@ -87,7 +87,7 @@ class TrainPageMixin:
         self.train_log.setAccessibleName("Training log")
         self.train_log.setMinimumHeight(200)
         self.train_log_toggle = disclosure(reference, "Training log and errors", self.train_log)
-        self.train_continue = button("Review saved runs", lambda: self.go_to(4))
+        self.train_continue = button("Review saved runs", lambda: self.go_to_step("review"))
         layout.addWidget(self.train_continue, alignment=Qt.AlignRight)
 
     def _set_duration(self, *args):
