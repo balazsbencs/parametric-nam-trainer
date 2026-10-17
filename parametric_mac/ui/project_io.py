@@ -11,25 +11,37 @@ from ..control_editor import starter
 from nam.capture.session import CaptureSession
 from ..assets import FILES
 from ..recent import project_status, resume_step
-from ..workflow import read_state, write_state
+
+# The verified capture signals that Install.command downloads into the repository.
+DEFAULT_INPUTS = Path(__file__).resolve().parents[2] / "inputs"
+from ..workflow import RECOMMENDED_LEVEL, read_state, write_state
 
 
 class ProjectMixin:
-    def _on_new_project(self):
-        if self._busy():
-            return
-        directory = QFileDialog.getExistingDirectory(self, "Choose an empty folder for this pedal project")
-        if directory:
-            try:
-                self._create_project(Path(directory))
-            except (OSError, ValueError) as exc:
-                QMessageBox.warning(self, "Could not create project", str(exc))
+    def _reset_project_state(self) -> None:
+        """No project open: the state the app starts in."""
+        self.project = None
+        self.project_dir = None
+        self.session = None
+        self._workflow = {}
+        self._route_fingerprint = None
+        self._preview = None
+        self.capture_log.clear()
+        self.train_log.clear()
+        self.train_progress.setValue(0)
+        self.retry_button.hide()
+        for check in (self.reamp_check, self.monitor_check, self.level_check):
+            check.setChecked(False)
+        # A new capture never inherits the old project's level or runs.
+        self._quality = RECOMMENDED_LEVEL
+        self._apply_quality(RECOMMENDED_LEVEL)
+        self._refresh_runs()
 
     def _create_project(self, directory, inputs=None):
         directory = Path(directory)
         if any(directory.iterdir()):
             raise ValueError("Choose an empty folder. Your existing project and recordings have been left untouched.")
-        inputs = Path(inputs) if inputs else Path(__file__).resolve().parents[1] / "inputs"
+        inputs = Path(inputs) if inputs else DEFAULT_INPUTS
         for name, digest in FILES.items():
             path = inputs / name
             if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
@@ -55,6 +67,7 @@ class ProjectMixin:
         write_state(directory, self._workflow)
         self.status_label.setText("Project created. Connect your pedal and test the connection.")
         self._remember_project()
+        self._refresh_runs()
         self.go_to_step("connect")
         self._refresh_all()
         self._refresh_preview()
@@ -114,7 +127,9 @@ class ProjectMixin:
         self._refresh_all()
         self._refresh_preview()
         self._refresh_runs()
+        self._gear_folder = None
         self._remember_project()
+        self._refresh_gear()
         self.go_to_step(resume_step(project_status(self.project_dir)))
 
     def _route_ready(self):
