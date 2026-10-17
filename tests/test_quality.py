@@ -48,3 +48,11 @@ def test_one_knob_more_coverage_never_reduces_training_settings():
         knobs, train, tests = quality_settings(source, level)
         counts.append(len(make_plan(knobs, train, tests).entries_for_split('train')))
     assert counts == sorted(counts)
+
+
+def test_main_levels_map_to_existing_qualities():
+    from parametric_mac.workflow import MAIN_LEVELS, QUALITIES, RECOMMENDED_LEVEL, level_label
+    assert [level_label(i) for i in range(5)] == ["Fast", "Decent", "Good", "Max", "Overkill"]
+    assert [QUALITIES[i].name for _, i in MAIN_LEVELS] == ["Quick test", "Good", "Thorough"]
+    assert [name for name, _ in MAIN_LEVELS] == ["Fast", "Good", "Max"]
+    assert RECOMMENDED_LEVEL == 2

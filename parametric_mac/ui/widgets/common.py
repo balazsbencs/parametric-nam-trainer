@@ -2,6 +2,7 @@
 from PySide6.QtCore import Qt, QRectF, QSize, Signal
 from PySide6.QtGui import QPainter, QPen, QColor, QFont
 from PySide6.QtWidgets import (
+    QFrame,
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QSizePolicy, QBoxLayout, QLayout, QToolButton, QButtonGroup,
 )
@@ -60,6 +61,77 @@ class Segmented(QWidget):
 
     def button(self, index: int) -> QPushButton:
         return self._buttons[index]
+
+
+class ChoiceCard(QFrame):
+    """A large selectable card: title, optional tag, a big number with a unit, and one sentence."""
+
+    clicked = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.selected = False
+        self.setProperty("card", True)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(6)
+        head_widget = QWidget()
+        head_widget.setFixedHeight(26)
+        head = QHBoxLayout(head_widget)
+        head.setContentsMargins(0, 0, 0, 0)
+        self._title = label("", "section")
+        self._title.setWordWrap(False)
+        self._title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self._tag = label("")
+        self._tag.setProperty("tag", "accent")
+        self._tag.setWordWrap(False)
+        self._tag.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        head.addWidget(self._title)
+        head.addWidget(self._tag)
+        head.addStretch()
+        layout.addWidget(head_widget)
+        self._number = label("", "quality")
+        self._number.setWordWrap(False)
+        layout.addWidget(self._number)
+        self._body = label("", "muted")
+        layout.addWidget(self._body)
+
+    def set_content(self, title: str, number: str, unit: str, body: str, tag: str | None) -> None:
+        self._title.setText(title)
+        self._number.setText(number)
+        self._unit = unit
+        self._number.setToolTip(unit)
+        self._body.setText(f"{unit}\n{body}" if unit else body)
+        self._tag.setText(tag or "")
+        self._tag.setVisible(bool(tag))
+        self.setAccessibleName(f"{title}: {number} {unit}. {body}")
+
+    def set_selected(self, selected: bool) -> None:
+        self.selected = selected
+        set_style_property(self, "selected", selected)
+
+    def title_text(self) -> str:
+        return self._title.text()
+
+    def number_text(self) -> str:
+        return self._number.text()
+
+    def tag_text(self) -> str:
+        return self._tag.text() if self._tag.isVisibleTo(self) else ""
+
+    def mousePressEvent(self, event):
+        if self.isEnabled() and event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+    def keyPressEvent(self, event):
+        if self.isEnabled() and event.key() in (Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter):
+            self.clicked.emit()
+            return
+        super().keyPressEvent(event)
 
 
 def set_style_property(widget, name: str, value) -> None:

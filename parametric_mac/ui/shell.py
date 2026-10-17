@@ -15,14 +15,13 @@ STEPS: tuple[Step, ...] = (
     Step("start", "Start", False),
     Step("gear", "Gear", True),
     Step("connect", "Connect", True),
-    Step("plan", "Plan", True),
-    Step("capture", "Capture", True),
+    Step("record", "Record", True),
     Step("train", "Train", True),
     Step("review", "Review", True),
 )
 STEP_KEYS = tuple(step.key for step in STEPS)
 # Final step names that do not exist yet in the transitional STEPS (removed by Tasks 7, 9 and 12).
-STEP_ALIASES = {"record": "capture", "listen": "review"}
+STEP_ALIASES = {"listen": "review"}
 APPEARANCE_CHOICES = (("system", "Match macOS"), ("light", "Light"), ("dark", "Dark"))
 
 
@@ -88,15 +87,14 @@ class ShellMixin:
         self._build_start_page()
         self._build_gear_page()
         self._connect_page()
-        self._plan_page()
-        self._capture_page()
+        self._build_record_page()
         self._train_page()
         self._review_page()
         # Transitional until Task 10: Record keeps one filled button (Record this setting).
         self.capture_continue.setProperty("primary", False)
         self.capture_continue.setProperty("outline", True)
-        actions = {"start": None, "gear": self._gear_footer, "connect": self.connect_button, "plan": self.plan_button,
-                   "capture": self.capture_continue, "train": self.train_continue, "review": self.save_model_button}
+        actions = {"start": None, "gear": self._gear_footer, "connect": self.connect_button, "record": self._record_footer,
+                   "train": self.train_continue, "review": self.save_model_button}
         for key in STEP_KEYS:
             self.footer.add_action(key, actions[key])
 
@@ -133,8 +131,8 @@ class ShellMixin:
                           self.device_combo, self.wire_check,
                           self.gear_next_button, self.gear_change_link, self.gear_new_link,
                           self.control_editor, self.gear_kind, self.fixed_notes, self.audio_controls,
-                          self.route_test_button, self.plan_advanced, self.quality_slider,
-                          self.plan_button, self.check_button, self.train_button,
+                          self.route_test_button, self.plan_advanced, *self.quality_cards, *self.more_level_buttons,
+                          self.record_start_button, self.check_button, self.train_button,
                           self.train_settings, self.capture_next_button,
                           self.capture_selected_button, self.check_captures_button,
                           self.clear_captures_button, self.export_concat_button,
@@ -152,7 +150,7 @@ class ShellMixin:
         self.gear_kind.currentIndexChanged.connect(self._gear_changed)
         self.review_check.toggled.connect(self._save_review)
 
-    def _page(self, title, intro):
+    def _page(self, title, intro, stack=None):
         scroll = PageScroll()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
@@ -165,7 +163,7 @@ class ShellMixin:
         layout.addWidget(label(title, "title"))
         layout.addWidget(label(intro, "muted"))
         scroll.setWidget(page)
-        self.pages.addWidget(scroll)
+        (stack if stack is not None else self.pages).addWidget(scroll)
         return layout
 
     def go_to_step(self, key: str) -> None:
@@ -174,6 +172,9 @@ class ShellMixin:
         self.footer.show_step(key)
         if key == "review":
             self._refresh_runs()
+        if key == "record":
+            self._refresh_level_cards()
+            self._show_record_state()
         if key == "start":
             self._refresh_recent()
         self._refresh_steps()
@@ -196,7 +197,7 @@ class ShellMixin:
         flags = {"start": getattr(self, "project_dir", None) is not None,
                  "gear": getattr(self, "project_dir", None) is not None,
                  "connect": bool(project) and self._route_ready(),
-                 "plan": bool(project and project.entries), "capture": complete,
+                 "record": complete,
                  "train": self._exported_run() is not None, "review": False}
         return {key for key, value in flags.items() if value}
 
@@ -266,13 +267,14 @@ class ShellMixin:
         self.audio_advanced.setEnabled(not busy)
         locked = self._plan_locked()
         self.advanced_plan_hint.setText("These are the saved settings used to label this project’s recordings." if locked else
-                                        "Manual changes show Custom. Moving the quality slider restores preset counts and steps, while keeping physical ranges and knob roles.")
-        for widget in (self.quality_slider, self.plan_advanced, self.control_editor, self.gear_kind, self.fixed_notes, self.pedal_name):
+                                        "Manual changes show Custom counts. A level button restores its counts and knob steps.")
+        for widget in (*self.quality_cards, *self.more_level_buttons, self.plan_advanced, self.control_editor,
+                       self.gear_kind, self.fixed_notes, self.pedal_name):
             widget.setEnabled(not busy and not locked)
-        self.plan_lock_label.setText("This plan is locked because recording has started. Create a separate project to change quality, knobs or levels." if locked else "Go to Start to create or open a project." if not self.project else "")
+        self.record_lock_label.setText("Recording has started, so the level is locked. To change it, start a new capture." if locked else "")
         self.separate_button.setVisible(locked)
-        self.plan_button.setText("Continue capturing" if locked else "Start capturing")
-        self.plan_button.setEnabled(not busy and self.project is not None and self._preview is not None)
+        self.record_start_button.setText("Continue recording" if locked else "Start recording →")
+        self.record_start_button.setEnabled(not busy and self.project is not None and self._preview is not None)
         self.connect_button.setEnabled(not busy and self.project is not None and self._route_ready())
         self.route_test_button.setEnabled(not busy and self._has_device() and self.wire_check.isChecked()
                                           and self._rate_problem() is None)

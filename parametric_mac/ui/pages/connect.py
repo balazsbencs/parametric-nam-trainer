@@ -66,7 +66,7 @@ class ConnectPageMixin:
         columns.addWidget(self._connect_aside(), 2)
         scroll.setWidget(content)
         self.pages.addWidget(scroll)
-        self.connect_button = button("Next: Plan →", lambda: self.go_to_step("plan"), True)
+        self.connect_button = button("Next: Record →", lambda: self.go_to_step("record"), True)
 
     def _wire_stage(self) -> Stage:
         stage = Stage(1, "Wire it up")
