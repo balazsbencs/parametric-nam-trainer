@@ -1,0 +1,251 @@
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  .pg * { box-sizing: border-box; }
+  .pg { --bg:#101317; --deep:#0c0f12; --raise:#161b21; --line:#222830; --line2:#2a313b; --tx:#e3e8ee; --mut:#7f8a97; --dim:#56606c; --acc:#d4ff4f; --ok:#8de07a; --warn:#ffb547; --rec:#ff4d4d;
+        font-family: 'Geist', -apple-system, system-ui, sans-serif; }
+  .pg .num { font-family: 'Geist Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .pg .label-above { font-size: 13px; color: #9aa3ad; margin: 34px 0 10px; }
+  .pg .win { max-width: 1080px; min-height: 640px; background: var(--bg); color: var(--tx); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 70px -25px rgba(0,0,0,.7); border: 1px solid #1b2027; }
+  .pg .top { display: flex; align-items: center; gap: 18px; padding: 12px 20px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .pg .brand { font-weight: 600; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+  .pg .brand i { width: 9px; height: 9px; border-radius: 50%; background: var(--acc); box-shadow: 0 0 10px var(--acc); }
+  .pg .steps { display: flex; align-items: center; gap: 4px; margin: 0 auto; color: var(--dim); }
+  .pg .steps .s { display: flex; align-items: center; gap: 7px; padding: 5px 10px; }
+  .pg .steps .d { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #343c47; display: grid; place-items: center; font-size: 10px; }
+  .pg .steps .s.on { color: var(--acc); } .pg .steps .s.on .d { background: var(--acc); border-color: var(--acc); color: var(--bg); font-weight: 600; }
+  .pg .steps .s.done { color: #a9b3bf; } .pg .steps .s.done .d { border-color: #4b5562; }
+  .pg .steps .b { width: 16px; height: 1px; background: var(--line2); }
+  .pg .proj { color: var(--mut); }
+  .pg .content { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr; min-height: 0; }
+  .pg .main { padding: 30px 36px; display: flex; flex-direction: column; gap: 18px; min-height: 0; }
+  .pg .aside { background: var(--deep); border-left: 1px solid var(--line); padding: 30px 30px; display: flex; flex-direction: column; gap: 16px; }
+  .pg h4 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.03em; }
+  .pg .sub { color: var(--mut); font-size: 14px; margin-top: 6px; max-width: 46ch; line-height: 1.45; }
+  .pg .lbl { font-size: 12px; color: var(--mut); margin-bottom: 7px; }
+  .pg .field { border: 1px solid var(--line2); border-radius: 7px; padding: 9px 12px; font-size: 14px; background: #0e1115; }
+  .pg .seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 7px; overflow: hidden; font-size: 13px; }
+  .pg .seg span { padding: 8px 18px; color: var(--mut); } .pg .seg span.on { background: var(--acc); color: var(--bg); font-weight: 600; }
+  .pg .row2 { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
+  .pg .tiles { display: flex; gap: 10px; flex-wrap: wrap; }
+  .pg .tile { width: 118px; border: 1px solid var(--line2); border-radius: 9px; padding: 10px; background: var(--raise); display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; position: relative; }
+  .pg .tile .x { position: absolute; top: 5px; right: 8px; color: var(--dim); font-size: 12px; }
+  .pg .tile .rng { font-size: 11px; color: var(--mut); }
+  .pg .tile.add { border-style: dashed; background: transparent; color: var(--mut); justify-content: center; min-height: 104px; }
+  .pg .hint { font-size: 12px; color: var(--mut); }
+  .pg .hint b { color: var(--tx); font-weight: 500; }
+  .pg .foot { display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-top: 1px solid var(--line); font-size: 12px; color: var(--mut); }
+  .pg .btn { white-space: nowrap; border-radius: 8px; padding: 10px 18px; font-size: 14px; font-weight: 600; }
+  .pg .btn.pri { background: var(--acc); color: var(--bg); margin-left: auto; }
+  .pg .btn.out { border: 1.5px solid var(--acc); color: var(--acc); }
+  .pg .btn.ghost { color: var(--mut); border: 1px solid var(--line2); }
+  .pg .link { color: var(--acc); }
+  .pg .pedal { margin: auto; width: 230px; border-radius: 18px; padding: 22px 18px 26px; background: linear-gradient(160deg, #1d242c, #141a20); border: 1px solid #2c343e; box-shadow: inset 0 1px 0 #ffffff10, 0 30px 50px -30px #000; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .pg .pedal .ks { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .pg .pedal .k { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--mut); }
+  .pg .pedal .k.fixed { opacity: .45; }
+  .pg .pedal .led { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); box-shadow: 0 0 12px var(--rec); }
+  .pg .pedal .stomp { width: 54px; height: 54px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #3a434e, #1a2027); border: 1px solid #39424d; margin-top: 18px; }
+  .pg .pedal .nm { font-weight: 600; font-size: 14px; letter-spacing: .02em; color: var(--tx); }
+  .pg .est { display: flex; gap: 22px; }
+  .pg .est div { font-size: 12px; color: var(--mut); } .pg .est b { display: block; font-size: 20px; color: var(--tx); font-weight: 600; margin-bottom: 2px; }
+  /* connect */
+  .pg .chain { display: flex; align-items: center; gap: 0; margin-top: 4px; }
+  .pg .node { border: 1px solid var(--line2); border-radius: 9px; padding: 10px 12px; background: var(--raise); font-size: 12px; min-width: 104px; }
+  .pg .node b { display: block; font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .pg .node span { color: var(--mut); }
+  .pg .node.hot { border-color: var(--acc); box-shadow: 0 0 0 3px #d4ff4f14; }
+  .pg .wire { flex: 1; min-width: 18px; height: 2px; background: repeating-linear-gradient(90deg, var(--acc) 0 6px, transparent 6px 10px); opacity: .8; }
+  .pg .check { display: flex; gap: 10px; font-size: 13px; align-items: flex-start; }
+  .pg .box { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid #4b5562; flex: none; margin-top: 1px; display: grid; place-items: center; font-size: 11px; color: var(--bg); }
+  .pg .box.on { background: var(--acc); border-color: var(--acc); }
+  .pg .stage { border: 1px solid var(--line2); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: var(--raise); }
+  .pg .stage.done { border-color: #2f4a2c; }
+  .pg .stage .h { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; }
+  .pg .stage .n { width: 22px; height: 22px; border-radius: 50%; border: 1px solid #4b5562; display: grid; place-items: center; font-size: 11px; color: var(--mut); font-weight: 500; }
+  .pg .stage.done .n { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+  .pg .stage.now .n { background: var(--acc); border-color: var(--acc); color: var(--bg); }
+  .pg .ok { color: var(--ok); font-size: 13px; }
+  .pg .meter { height: 10px; border-radius: 3px; background: linear-gradient(90deg, #2c4a29 0 62%, #4a4a22 62% 84%, #4a2525 84%); position: relative; overflow: hidden; }
+  .pg .meter i { position: absolute; left: 0; top: 0; bottom: 0; width: 71%; background: linear-gradient(90deg, var(--ok) 0 80%, var(--acc)); }
+  .pg .scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); margin-top: 4px; }
+  /* start */
+  .pg .start { flex: 1; display: grid; grid-template-columns: 1fr 1.1fr; }
+  .pg .hero { padding: 54px 48px; display: flex; flex-direction: column; gap: 18px; background: radial-gradient(80% 60% at 0% 100%, #d4ff4f12, transparent 70%); }
+  .pg .hero h5 { margin: 0; font-size: 40px; font-weight: 600; letter-spacing: -0.04em; line-height: 1.05; }
+  .pg .recent { background: var(--deep); border-left: 1px solid var(--line); padding: 40px 34px; display: flex; flex-direction: column; gap: 4px; }
+  .pg .item { display: grid; grid-template-columns: 40px 1fr auto; gap: 14px; align-items: center; padding: 12px; border-radius: 9px; }
+  .pg .item:hover, .pg .item.hl { background: var(--raise); }
+  .pg .ico { width: 40px; height: 40px; border-radius: 9px; background: #1a2027; border: 1px solid var(--line2); display: grid; place-items: center; }
+  .pg .item .t { font-size: 14px; font-weight: 500; } .pg .item .m { font-size: 12px; color: var(--mut); margin-top: 2px; }
+  .pg .pill { font-size: 11px; padding: 3px 8px; border-radius: 5px; }
+  .pg .pill.go { background: #2a3312; color: var(--acc); } .pg .pill.ok { background: #18251a; color: var(--ok); } .pg .pill.mid { background: #1d232b; color: #a9b3bf; }
+  .pg .mini { height: 4px; border-radius: 9px; background: #1d232b; overflow: hidden; width: 120px; margin-top: 6px; } .pg .mini i { display: block; height: 100%; background: var(--acc); }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="knob" viewBox="0 0 60 60"><circle cx="30" cy="30" r="27" fill="none" stroke="#2a313b" stroke-width="2" stroke-dasharray="1.2 4" transform="rotate(135 30 30)"/><circle cx="30" cy="30" r="20" fill="#1b2128" stroke="#343c47"/><line x1="30" y1="30" x2="30" y2="14" stroke="#e3e8ee" stroke-width="2.5" stroke-linecap="round"/></symbol>
+    <symbol id="switch" viewBox="0 0 60 60"><rect x="24" y="12" width="12" height="36" rx="6" fill="#1b2128" stroke="#343c47"/><circle cx="30" cy="20" r="5" fill="#e3e8ee"/></symbol>
+  </defs>
+</svg>
+
+<style>
+  .pg .choice { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .pg .ch { border: 1px solid var(--line2); border-radius: 10px; padding: 16px; background: var(--raise); display: flex; flex-direction: column; gap: 6px; }
+  .pg .ch.on { border-color: var(--acc); box-shadow: 0 0 0 3px #d4ff4f18; }
+  .pg .ch .t { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .pg .ch .big { font-size: 22px; font-weight: 600; }
+  .pg .ch .m { font-size: 12px; color: var(--mut); line-height: 1.4; }
+  .pg .rec-btn { display: inline-flex; align-items: center; gap: 10px; border: 1.5px solid var(--acc); color: var(--acc); border-radius: 10px; padding: 13px 26px; font-weight: 600; font-size: 16px; white-space: nowrap; }
+  .pg .rec-btn i { width: 12px; height: 12px; border-radius: 50%; background: var(--rec); box-shadow: 0 0 10px var(--rec); }
+  .pg .kbd { background: #1d232b; color: #a9b3bf; border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+  .pg .bigknobs { display: flex; gap: 44px; margin: 6px 0; }
+  .pg .bk { text-align: center; } .pg .bk .l { font-size: 13px; color: var(--mut); } .pg .bk .v { font-size: 34px; font-weight: 600; letter-spacing: -0.02em; margin-top: 2px; }
+  .pg .alert { border: 1px solid #5a2a2a; background: #1e1414; border-radius: 10px; padding: 14px 16px; display: flex; gap: 12px; font-size: 13px; }
+  .pg .alert b { display: block; font-size: 14px; margin-bottom: 3px; }
+  .pg .alert .ic { color: var(--rec); font-size: 16px; }
+  .pg .prog { height: 6px; border-radius: 9px; background: #1d232b; overflow: hidden; } .pg .prog i { display: block; height: 100%; background: var(--acc); }
+  .pg .qrow { display: flex; justify-content: space-between; font-size: 13px; padding: 9px 0; border-bottom: 1px solid #1a1f26; }
+  .pg .tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+  .pg .tag.ok { background: #18251a; color: var(--ok); } .pg .tag.bad { background: #2a1616; color: #ff8a8a; } .pg .tag.next { background: #2a3312; color: var(--acc); }
+  .pg .bars { display: flex; gap: 2px; align-items: flex-end; height: 34px; } .pg .bars span { flex: 1; background: var(--ok); border-radius: 1px; } .pg .bars span.r { background: var(--rec); }
+  .pg .chart { position: relative; height: 170px; border: 1px solid var(--line); border-radius: 10px; background: repeating-linear-gradient(0deg, transparent 0 41px, #1a1f26 41px 42px); overflow: hidden; }
+  .pg .stat { display: flex; gap: 28px; } .pg .stat div { font-size: 12px; color: var(--mut); } .pg .stat b { display: block; font-size: 22px; color: var(--tx); font-weight: 600; }
+  .pg .sel { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--line2); border-radius: 7px; padding: 9px 12px; font-size: 14px; background: #0e1115; }
+  .pg .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .pg .tbl th { text-align: left; font-weight: 400; color: var(--mut); font-size: 12px; padding: 0 0 8px; border-bottom: 1px solid var(--line); }
+  .pg .tbl td { padding: 10px 0; border-bottom: 1px solid #1a1f26; }
+  .pg .play { display: inline-flex; align-items: center; gap: 6px; color: var(--acc); font-size: 12px; }
+  .pg .file { display: flex; gap: 14px; align-items: center; border: 1px solid var(--line2); background: var(--raise); border-radius: 10px; padding: 14px; }
+  .pg .file .ic { width: 42px; height: 48px; border-radius: 6px; background: #1d232b; border: 1px solid var(--line2); display: grid; place-items: center; font-size: 10px; color: var(--acc); font-family: 'Geist Mono', monospace; }
+  .pg .match { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+  .pg .dots { display: inline-flex; gap: 3px; } .pg .dots i { width: 14px; height: 6px; border-radius: 2px; background: #2a313b; } .pg .dots i.on { background: var(--ok); }
+</style>
+
+<div class="pg">
+<h2>The last pages: Record, Train, Listen</h2>
+<p class="subtitle">Five windows: Record (first visit and a bad take), Train (before and during), and Listen. Tell me in the terminal what is wrong, missing, or too much.</p>
+
+<!-- ============ RECORD · FIRST VISIT ============ -->
+<div class="label-above">3a · Record — first visit: pick how detailed</div>
+<div class="win">
+  <div class="top"><div class="brand"><i></i>Parametric</div>
+    <div class="steps"><div class="s done"><span class="d">✓</span>Gear</div><div class="b"></div><div class="s done"><span class="d">✓</span>Connect</div><div class="b"></div><div class="s on"><span class="d">3</span>Record</div><div class="b"></div><div class="s"><span class="d">4</span>Train</div><div class="b"></div><div class="s"><span class="d">5</span>Listen</div></div>
+    <div class="proj">Klon-style drive</div></div>
+  <div class="main" style="flex:1;padding:40px 48px;gap:24px">
+    <div><h4>How detailed should the capture be?</h4><div class="sub" style="max-width:60ch">More recordings teach the model more knob positions. You cannot change this after the first take.</div></div>
+    <div class="choice">
+      <div class="ch"><div class="t">Fast</div><div class="big num">12 <span style="font-size:13px;color:var(--mut);font-weight:400">takes · ~9 min</span></div><div class="m">Test your setup from start to finish. Not for a final model.</div></div>
+      <div class="ch on"><div class="t">Good <span class="tag next">Recommended</span></div><div class="big num">40 <span style="font-size:13px;color:var(--mut);font-weight:400">takes · ~30 min</span></div><div class="m">A good first model for most pedals.</div></div>
+      <div class="ch"><div class="t">Max</div><div class="big num">96 <span style="font-size:13px;color:var(--mut);font-weight:400">takes · ~70 min</span></div><div class="m">More knob positions. Use it when Good misses some settings.</div></div>
+    </div>
+    <div class="hint">The app picks the knob positions for you. <span class="link">Expert settings ▸</span> exact counts, seed, test settings</div>
+  </div>
+  <div class="foot"><span>Have your pedal and its knobs in reach</span><div class="btn pri">Start recording →</div></div>
+</div>
+
+<!-- ============ RECORD · BAD TAKE ============ -->
+<div class="label-above">3b · Record — a take that failed the check</div>
+<div class="win">
+  <div class="top"><div class="brand"><i></i>Parametric</div>
+    <div class="steps"><div class="s done"><span class="d">✓</span>Gear</div><div class="b"></div><div class="s done"><span class="d">✓</span>Connect</div><div class="b"></div><div class="s on"><span class="d">3</span>Record</div><div class="b"></div><div class="s"><span class="d">4</span>Train</div><div class="b"></div><div class="s"><span class="d">5</span>Listen</div></div>
+    <div class="proj">Klon-style drive</div></div>
+  <div class="content">
+    <div class="main">
+      <div class="num" style="font-size:12px;color:var(--mut);letter-spacing:.06em">SETTING 19 / 40</div>
+      <h4 style="margin-top:-10px">Set your pedal like this</h4>
+      <div class="bigknobs">
+        <div class="bk"><div class="l">Drive</div><svg width="104" height="104" viewBox="0 0 60 60" style="transform:rotate(-67deg)"><use href="#knob"/></svg><div class="v num">2.5</div></div>
+        <div class="bk"><div class="l">Tone</div><svg width="104" height="104" viewBox="0 0 60 60" style="transform:rotate(54deg)"><use href="#knob"/></svg><div class="v num">7.0</div></div>
+      </div>
+      <div class="alert"><span class="ic">●</span><div><b>Too loud — the take clipped</b>Turn the reamp box output down a little. Then check the level again and record this setting again.</div></div>
+      <div style="display:flex;align-items:center;gap:14px;margin-top:auto"><span class="rec-btn"><i></i>Record again</span><span class="hint">or press <span class="kbd">Space</span></span><span class="link" style="margin-left:auto;font-size:13px">Check level</span></div>
+    </div>
+    <div class="aside">
+      <div><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px"><span style="color:var(--mut)">Progress</span><span class="num">18 / 40</span></div><div class="prog"><i style="width:45%"></i></div><div class="hint" style="margin-top:8px">About 16 minutes left · saved after every take</div></div>
+      <div><div class="lbl">Last take</div><div class="bars"><span style="height:40%"></span><span style="height:62%"></span><span style="height:80%"></span><span class="r" style="height:100%"></span><span class="r" style="height:100%"></span><span style="height:74%"></span><span style="height:58%"></span><span style="height:66%"></span><span class="r" style="height:100%"></span><span style="height:50%"></span></div>
+        <div style="margin-top:8px;font-size:12px"><span class="tag bad">Clipped</span> <span style="color:var(--mut)">Peak 0 dB</span></div></div>
+      <div><div class="lbl">Up next</div>
+        <div class="qrow"><span>Drive <span class="num">6.0</span> · Tone <span class="num">3.5</span></span><span class="tag next num">20</span></div>
+        <div class="qrow"><span>Drive <span class="num">4.5</span> · Tone <span class="num">5.0</span></span><span class="num" style="color:var(--mut)">21</span></div>
+        <div class="hint" style="margin-top:10px"><span class="link">All takes ▸</span> see every setting, record one again</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TRAIN · BEFORE ============ -->
+<div class="label-above">4a · Train — before you start</div>
+<div class="win">
+  <div class="top"><div class="brand"><i></i>Parametric</div>
+    <div class="steps"><div class="s done"><span class="d">✓</span>Gear</div><div class="b"></div><div class="s done"><span class="d">✓</span>Connect</div><div class="b"></div><div class="s done"><span class="d">✓</span>Record</div><div class="b"></div><div class="s on"><span class="d">4</span>Train</div><div class="b"></div><div class="s"><span class="d">5</span>Listen</div></div>
+    <div class="proj">Klon-style drive</div></div>
+  <div class="main" style="flex:1;padding:40px 48px;gap:24px">
+    <div><h4>Train your model</h4><div class="sub" style="max-width:62ch">Your Mac learns how the pedal sounds at every knob position. Keep the app open while it trains.</div></div>
+    <div class="choice" style="grid-template-columns:1fr 1fr;max-width:720px">
+      <div class="ch"><div class="t">Quick test</div><div class="big num">~2 min</div><div class="m">Checks that everything works. The model will not sound good yet.</div></div>
+      <div class="ch on"><div class="t">Full training <span class="tag next">Recommended</span></div><div class="big num">~25 min</div><div class="m">The real model. Makes a Standard and a Nano size in one file.</div></div>
+    </div>
+    <div style="display:flex;gap:28px;font-size:13px;color:var(--mut)"><span class="ok">✓ 40 recordings checked</span><span>Uses the Apple GPU</span></div>
+    <div class="hint"><span class="link">Expert settings ▸</span> model type, epochs, batch size, CPU or GPU</div>
+  </div>
+  <div class="foot"><span>The app checks the recordings first, then trains</span><div class="btn pri">Start training →</div></div>
+</div>
+
+<!-- ============ TRAIN · RUNNING ============ -->
+<div class="label-above">4b · Train — while it runs (and if it fails)</div>
+<div class="win">
+  <div class="top"><div class="brand"><i></i>Parametric</div>
+    <div class="steps"><div class="s done"><span class="d">✓</span>Gear</div><div class="b"></div><div class="s done"><span class="d">✓</span>Connect</div><div class="b"></div><div class="s done"><span class="d">✓</span>Record</div><div class="b"></div><div class="s on"><span class="d">4</span>Train</div><div class="b"></div><div class="s"><span class="d">5</span>Listen</div></div>
+    <div class="proj">Klon-style drive</div></div>
+  <div class="content">
+    <div class="main">
+      <div><h4>Training · Standard size</h4><div class="sub">Step 1 of 2. The Nano size comes next.</div></div>
+      <div class="stat"><div><b class="num">61%</b>done</div><div><b class="num">~11 min</b>left</div><div><b class="num">122 / 200</b>rounds</div></div>
+      <div class="prog"><i style="width:61%"></i></div>
+      <div>
+        <div class="lbl" style="display:flex;justify-content:space-between"><span>Difference from the real pedal, on test settings</span><span>lower is better</span></div>
+        <div class="chart"><svg viewBox="0 0 520 170" preserveAspectRatio="none" width="100%" height="100%"><defs><linearGradient id="fillc" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#d4ff4f" stop-opacity=".22"/><stop offset="1" stop-color="#d4ff4f" stop-opacity="0"/></linearGradient></defs><path d="M0,14 C30,60 50,95 90,112 S170,132 220,138 S290,144 318,146 L318,170 L0,170 Z" fill="url(#fillc)"/><path d="M0,14 C30,60 50,95 90,112 S170,132 220,138 S290,144 318,146" fill="none" stroke="#d4ff4f" stroke-width="2"/><circle cx="318" cy="146" r="4" fill="#d4ff4f"/><line x1="318" y1="0" x2="318" y2="170" stroke="#d4ff4f" stroke-opacity=".25" stroke-dasharray="3 4"/></svg></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:auto"><div class="btn ghost">Stop training</div></div>
+    </div>
+    <div class="aside">
+      <div class="lbl">If something goes wrong</div>
+      <div class="alert"><span class="ic">●</span><div><b>Training stopped: not enough graphics memory</b>Your recordings are safe. The CPU is slower but uses less memory.<div style="display:flex;gap:10px;margin-top:12px"><span class="btn out" style="padding:7px 14px;font-size:13px">Try again on CPU</span><span class="link" style="align-self:center;font-size:12px">Show log</span></div></div></div>
+      <div class="hint" style="margin-top:auto">You can look at other pages while training runs. Settings that change the recordings are locked until it ends.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ LISTEN ============ -->
+<div class="label-above">5 · Listen — your model is ready</div>
+<div class="win">
+  <div class="top"><div class="brand"><i></i>Parametric</div>
+    <div class="steps"><div class="s done"><span class="d">✓</span>Gear</div><div class="b"></div><div class="s done"><span class="d">✓</span>Connect</div><div class="b"></div><div class="s done"><span class="d">✓</span>Record</div><div class="b"></div><div class="s done"><span class="d">✓</span>Train</div><div class="b"></div><div class="s on"><span class="d">5</span>Listen</div></div>
+    <div class="proj">Klon-style drive</div></div>
+  <div class="content">
+    <div class="main">
+      <div><h4>Your model is ready</h4><div class="sub">Listen to it before you share it. A good number does not always mean a good sound.</div></div>
+      <div class="file"><div class="ic">.nam</div><div style="flex:1"><div style="font-weight:600">Klon-style drive.nam</div><div class="hint">Standard + Nano · Drive, Tone · trained 17 Oct, 19:42</div></div><div class="btn pri" style="margin-left:0">Save model…</div></div>
+      <div>
+        <div class="lbl">Test settings — the model never heard these</div>
+        <table class="tbl">
+          <tr><th>Drive</th><th>Tone</th><th>Match</th><th></th></tr>
+          <tr><td class="num">3.0</td><td class="num">4.5</td><td><span class="match"><span class="dots"><i class="on"></i><i class="on"></i><i class="on"></i></span>Close</span></td><td><span class="play">▶ Real pedal</span></td></tr>
+          <tr><td class="num">6.5</td><td class="num">7.0</td><td><span class="match"><span class="dots"><i class="on"></i><i class="on"></i><i class="on"></i></span>Close</span></td><td><span class="play">▶ Real pedal</span></td></tr>
+          <tr><td class="num">9.0</td><td class="num">1.0</td><td><span class="match"><span class="dots"><i class="on"></i><i></i><i></i></span><span style="color:var(--warn)">Check by ear</span></span></td><td><span class="play">▶ Real pedal</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="aside">
+      <div class="lbl">Use it in a player</div>
+      <div style="font-size:13px;line-height:1.5;color:#c3cad3">Load the file in a player that supports parametric models, like <b>Ardor</b>. The normal NAM player cannot open it.</div>
+      <div class="link" style="font-size:13px">How to load it in Ardor ▸</div>
+      <div class="lbl" style="margin-top:10px">Did it pass your ears?</div>
+      <div class="check"><span class="box"></span>The test settings sound like the real pedal</div>
+      <div class="check"><span class="box"></span>Knob moves sound smooth, with no clicks</div>
+      <div class="hint" style="margin-top:auto"><span class="link">Earlier models ▸</span> 2 more · <span class="link">Open project folder</span></div>
+    </div>
+  </div>
+</div>
+
+</div>

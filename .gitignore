@@ -9,3 +9,5 @@ inputs/
 dist/
 .impeccable/hook.cache.json
 .impeccable/config.local.json
+
+.superpowers/
