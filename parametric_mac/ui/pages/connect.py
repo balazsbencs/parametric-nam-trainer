@@ -131,7 +131,7 @@ class ConnectPageMixin:
         self.loopback_check.setChecked(False)
         self.audio_advanced_toggle = disclosure(right, "Advanced audio routing", advanced)
         self.audio_advanced = advanced
-        self.connect_button = button("Continue to plan", lambda: self.go_to(1), True)
+        self.connect_button = button("Continue to plan", lambda: self.go_to_step("plan"), True)
         layout.addWidget(self.connect_button, alignment=Qt.AlignRight)
         layout.addStretch()
 
@@ -159,7 +159,6 @@ class ConnectPageMixin:
         if self.project:
             self._workflow['draft_controls'] = [ControlModel.from_spec(c).model_dump() for c in self.control_editor.controls]
             write_state(self.project_dir, self._workflow)
-        self.sidebar_summary.setText(f'{len(self.control_editor.controls)} controls · mono')
 
     def _use_starter(self, amp):
         if self._busy() or self._plan_locked():

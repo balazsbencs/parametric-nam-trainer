@@ -1,14 +1,25 @@
 """Window shell: page stack, navigation and shared state refresh."""
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QMessageBox, QStackedWidget,
+    QWidget, QVBoxLayout, QHBoxLayout, QMessageBox, QStackedWidget, QMenu,
     QScrollArea,
 )
 from ..controls import format_controls
-from .widgets.common import themed, label, button, StageButton, PageScroll
+from .widgets.common import themed, label, button, PageScroll
+from .widgets.shell_bars import Footer, Step, StepBar, TopBar  # noqa: F401  (StepBar is part of this module's API)
 
-
-STAGES = ("Connect", "Plan", "Capture", "Train", "Review")
+# Transitional order: later page tasks edit only this tuple (final: start, gear, connect, record, train, listen).
+STEPS: tuple[Step, ...] = (
+    Step("start", "Start", False),
+    Step("connect", "Connect", True),
+    Step("plan", "Plan", True),
+    Step("capture", "Capture", True),
+    Step("train", "Train", True),
+    Step("review", "Review", True),
+)
+STEP_KEYS = tuple(step.key for step in STEPS)
+APPEARANCE_CHOICES = (("system", "Match macOS"), ("light", "Light"), ("dark", "Dark"))
 
 
 class ShellMixin:
@@ -16,6 +27,14 @@ class ShellMixin:
         # Build upstream controls once, then place those exact controls in the new flow.
         # Their signal connections, device polling, recorder and QA remain intact.
         super()._build_ui()
+        self._prepare_legacy()
+        self._build_shell()
+        self._build_pages()
+        self._build_menus()
+        self._wire_signals()
+        self.go_to_step("start")
+
+    def _prepare_legacy(self):
         self._legacy = self.takeCentralWidget()
         self._legacy.setParent(self)
         self._legacy.hide()
@@ -35,66 +54,87 @@ class ShellMixin:
                         self.capture_sample_rate_warning_label):
             warning.setProperty("role", "warn")
 
+    def _build_shell(self):
         shell = QWidget()
-        outer = QHBoxLayout(shell)
+        outer = QVBoxLayout(shell)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
-        sidebar = QWidget()
-        sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(208)
-        side = QVBoxLayout(sidebar)
-        side.setContentsMargins(16, 24, 16, 20)
-        side.addWidget(label("Parametric", "section"))
-        self.sidebar_summary = label("Knobs & switches · mono", "muted")
-        side.addWidget(self.sidebar_summary)
-        side.addSpacing(24)
-        self.nav_buttons = []
+        self.top_bar = TopBar(STEPS)
+        for step_button in self.top_bar.step_bar.buttons():
+            themed(step_button, self.appearance)
+        self.top_bar.step_bar.selected.connect(self.go_to_step)
+        self.top_bar.brand_button.clicked.connect(lambda: self.go_to_step("start"))
+        self.project_title = self.top_bar.project_title
+        outer.addWidget(self.top_bar)
+        body = QWidget()
+        content = QVBoxLayout(body)
+        content.setContentsMargins(30, 0, 30, 0)
         self.pages = QStackedWidget()
-        for i, stage in enumerate(STAGES):
-            nav = themed(StageButton(i, stage, ("Audio & wiring", "Controls & coverage", "Record your gear", "Build the model", "Check & export")[i],
-                              lambda checked=False, index=i: self.go_to(index)), self.appearance)
-            side.addWidget(nav)
-            self.nav_buttons.append(nav)
-        side.addStretch()
-        self.activity_label = label("No job running", "muted")
-        side.addWidget(self.activity_label)
-        side.addWidget(label("A model with real controls.\nCapture several settings.\nTrain one controllable model.", "muted"))
-        outer.addWidget(sidebar)
-        right = QWidget()
-        content = QVBoxLayout(right)
-        content.setContentsMargins(30, 16, 30, 12)
-        header = QHBoxLayout()
-        self.project_title = label("Start a capture project", "section")
-        header.addWidget(self.project_title, 1)
-        self.new_button = button("New project", self._on_new_project)
-        self.open_button = button("Open project", self._on_open_project)
-        header.addWidget(self.new_button)
-        header.addWidget(self.open_button)
-        content.addLayout(header)
-        content.addWidget(self.pages, 1)
-        outer.addWidget(right, 1)
+        content.addWidget(self.pages)
+        outer.addWidget(body, 1)
+        self.footer = Footer()
+        self.activity_label = self.footer.status
+        outer.addWidget(self.footer)
         self.setCentralWidget(shell)
+        self.statusBar().hide()
+        # Upstream still reports some results through the status bar; show them in the footer.
+        self.statusBar().messageChanged.connect(lambda text: text and self.footer.set_status(text))
+
+    def _build_pages(self):
+        self._start_page()
         self._connect_page()
         self._plan_page()
         self._capture_page()
         self._train_page()
         self._review_page()
-        # The next step stays visible when the page needs scrolling on a small Mac.
-        self.stage_actions = QStackedWidget()
-        for action in (self.connect_button, self.plan_button, self.capture_continue,
-                       self.train_continue, self.save_model_button):
-            footer = QWidget()
-            row = QHBoxLayout(footer)
-            row.setContentsMargins(8, 8, 8, 0)
-            row.addStretch()
-            row.addWidget(action)
-            self.stage_actions.addWidget(footer)
-        self.stage_actions.setObjectName("stageActions")
-        content.addWidget(self.stage_actions)
-        self.train_tab = 3  # Kept for the Train.command launch option.
-        self.go_to(0)
+        # Transitional until Task 10: Record keeps one filled button (Record this setting).
+        self.capture_continue.setProperty("primary", False)
+        self.capture_continue.setProperty("outline", True)
+        actions = {"start": None, "connect": self.connect_button, "plan": self.plan_button,
+                   "capture": self.capture_continue, "train": self.train_continue, "review": self.save_model_button}
+        for key in STEP_KEYS:
+            self.footer.add_action(key, actions[key])
 
-        self._mutating = [self.new_button, self.open_button, self.pedal_name,
+    def _start_page(self):
+        layout = self._page("Parametric", "Capture your pedal or amp at many knob settings and train one model you can still control.")
+        self.new_button = button("New project", self._on_new_project, True)
+        self.open_button = button("Open project", self._on_open_project)
+        row = QHBoxLayout()
+        row.addWidget(self.new_button)
+        row.addWidget(self.open_button)
+        row.addStretch()
+        layout.addLayout(row)
+
+    def _build_menus(self):
+        group = QActionGroup(self)
+        group.setExclusive(True)
+        self.appearance_actions = []
+        for choice, text in APPEARANCE_CHOICES:
+            action = QAction(text, self)
+            action.setCheckable(True)
+            action.setChecked(self.appearance.choice() == choice)
+            action.triggered.connect(lambda checked=False, value=choice: self.appearance.set_choice(value))
+            group.addAction(action)
+            self.appearance_actions.append(action)
+        menu = QMenu(self)
+        menu.addActions(self.appearance_actions)
+        self.top_bar.appearance_button.setMenu(menu)
+        file_menu = self.menuBar().addMenu("File")
+        self.new_action = file_menu.addAction("New capture…", self._on_new_project)
+        self.new_action.setShortcut(QKeySequence.New)
+        self.open_action = file_menu.addAction("Open folder…", self._on_open_project)
+        self.open_action.setShortcut(QKeySequence.Open)
+        view = self.menuBar().addMenu("View")
+        view.addMenu("Appearance").addActions(self.appearance_actions)
+        about = self.menuBar().addMenu("Help").addAction("About Parametric")
+        about.setMenuRole(QAction.AboutRole)
+        about.triggered.connect(self._show_about)
+
+    def _show_about(self):
+        QMessageBox.about(self, "About Parametric", f"Parametric capture and training\n{self.version_label.text()}")
+
+    def _wire_signals(self):
+        self._mutating = [self.new_button, self.open_button, self.new_action, self.open_action, self.pedal_name,
                           self.control_editor, self.gear_kind, self.fixed_notes, self.audio_controls,
                           self.route_test_button, self.plan_advanced, self.quality_slider,
                           self.plan_button, self.check_button, self.train_button,
@@ -131,21 +171,56 @@ class ShellMixin:
         self.pages.addWidget(scroll)
         return layout
 
-    def go_to(self, index):
-        self.pages.setCurrentIndex(index)
-        if hasattr(self, "stage_actions"):
-            self.stage_actions.setCurrentIndex(index)
-        for i, nav in enumerate(self.nav_buttons):
-            nav.setChecked(i == index)
-        if index == 4:
+    def go_to_step(self, key: str) -> None:
+        self.pages.setCurrentIndex(STEP_KEYS.index(key))
+        self.footer.show_step(key)
+        if key == "review":
             self._refresh_runs()
+        self._refresh_steps()
+
+    def go_to(self, index: int) -> None:
+        """Old index-based navigation, in STEPS order."""
+        self.go_to_step(STEP_KEYS[index])
+
+    def current_step(self) -> str:
+        return STEP_KEYS[self.pages.currentIndex()]
+
+    def step_states(self) -> dict[str, str]:
+        done, current = self._done_steps(), self.current_step()
+        return {key: "current" if key == current else "done" if key in done else "todo" for key in STEP_KEYS}
+
+    def _done_steps(self) -> set[str]:
+        project = getattr(self, "project", None)
+        complete = bool(project and project.entries and not project.pending_entries())
+        flags = {"start": getattr(self, "project_dir", None) is not None,
+                 "connect": bool(project) and self._route_ready(),
+                 "plan": bool(project and project.entries), "capture": complete,
+                 "train": self._exported_run() is not None, "review": False}
+        return {key for key, value in flags.items() if value}
+
+    def _refresh_steps(self) -> None:
+        if not hasattr(self, "top_bar") or not hasattr(self, "run_combo"):
+            return
+        bar = self.top_bar.step_bar
+        bar.set_states(self.step_states())
+        numbered = [step.key for step in STEPS if step.numbered]
+        bar.set_enabled_steps(set(numbered) if getattr(self, "project_dir", None) else {numbered[0]})
+
+    def _status_text(self) -> str:
+        if self.process:
+            return "Checking recordings…" if self.command == "check" else "Training in progress…"
+        if self._worker:
+            return "Audio operation running…"
+        if not self.project:
+            return "Go to Start to create or open a project."
+        return f"{len(self.project.captured_entries())} of {len(self.project.entries)} recordings saved"
 
     def _refresh_all(self):
         super()._refresh_all()
         if not self._ready:
             return
         self.project_title.setText((self.project.name or self.project_dir.name) if self.project else
-                                   self.project_dir.name if self.project_dir else "Start a capture project")
+                                   self.project_dir.name if self.project_dir else "No project open")
         if self.project:
             captured = len(self.project.captured_entries())
             total = len(self.project.entries)
@@ -169,15 +244,12 @@ class ShellMixin:
                 self.queue_rows.addWidget(row)
             if not entries:
                 self.queue_rows.addWidget(label('All planned takes are saved.' if self.project.entries else 'Create a capture plan to see the next settings.', 'muted'))
-            self.sidebar_summary.setText(f'{len(self.control_editor.controls)} controls · mono')
         self.confirm_knobs.setChecked(False)
         self._sync_states()
 
     def _refresh_status_bar(self):
-        if not self.project:
-            self.status_bar.showMessage("Create or open a project to begin.")
-            return
-        self.status_bar.showMessage(f"{len(self.project.captured_entries())} of {len(self.project.entries)} recordings saved")
+        if hasattr(self, "footer"):
+            self.footer.set_status(self._status_text())
 
     def _sync_states(self, *args):
         if not self._ready:
@@ -191,7 +263,7 @@ class ShellMixin:
                                         "Manual changes show Custom. Moving the quality slider restores preset counts and steps, while keeping physical ranges and knob roles.")
         for widget in (self.quality_slider, self.plan_advanced, self.control_editor, self.gear_kind, self.fixed_notes, self.pedal_name):
             widget.setEnabled(not busy and not locked)
-        self.plan_lock_label.setText("This plan is locked because recording has started. Create a separate project to change quality, knobs or levels." if locked else "Create or open a project using the buttons above." if not self.project else "")
+        self.plan_lock_label.setText("This plan is locked because recording has started. Create a separate project to change quality, knobs or levels." if locked else "Go to Start to create or open a project." if not self.project else "")
         self.separate_button.setVisible(locked)
         self.plan_button.setText("Continue capturing" if locked else "Start capturing")
         self.plan_button.setEnabled(not busy and self.project is not None and self._preview is not None)
@@ -212,7 +284,8 @@ class ShellMixin:
         self.stop_button.setEnabled(self.process is not None and not self.stopping)
         self.review_check.setEnabled(not busy and self._exported_run() is not None)
         self.save_model_button.setEnabled(not busy and self._exported_run() is not None)
-        self.activity_label.setText("Checking recordings…" if self.process and self.command == "check" else "Training in progress…" if self.process else "Audio operation running…" if self._worker else "No job running")
+        self.footer.set_status(self._status_text())
+        self._refresh_steps()
         if self.project and self.project.entries and not self._route_ready() and not busy:
             self.capture_hint.setText("Return to Connect: confirm the setup and pass Test connection before recording. "
                                       + f"Keep fixed: {self.fixed_notes.text()}")

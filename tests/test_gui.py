@@ -21,7 +21,8 @@ window = MacWindow()
 window.show()
 app.processEvents()
 assert window.font().family() == 'Geist'
-assert window.pages.count() == 5
+from parametric_mac.ui.shell import STEPS
+assert window.pages.count() == len(STEPS)
 assert not window.train_button.isEnabled()
 assert not window.capture_next_button.isEnabled()
 assert window.quality_slider.value() == 2
@@ -30,15 +31,15 @@ assert window.effort_label.text().startswith('40 recordings')
 window.project_dir = Path(sys.argv[1])
 # This legacy test fixture deliberately uses a short, non-A2 network.
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('auto'))
-window.go_to(3)
+window.go_to_step("train")
 window._start('check')
 assert window.process is not None
 assert not window.train_button.isEnabled()
 assert not window.new_button.isEnabled()
 assert not window.model_architecture.isEnabled()
-window.go_to(4)
-assert window.pages.currentIndex() == 4
-assert all(b.isEnabled() for b in window.nav_buttons)
+window.go_to_step("review")
+assert window.current_step() == "review"
+assert all(b.isEnabled() for b in window.top_bar.step_bar.buttons())
 for _ in range(400):
     if window.process is None:
         break
@@ -52,7 +53,7 @@ assert window.model_architecture.isEnabled()
 # Failure disclosure follows actual visibility, and the first click collapses it.
 root = Path(sys.argv[1])
 window.project_dir = root / 'missing-project'
-window.go_to(3)
+window.go_to_step("train")
 window._start('check')
 for _ in range(400):
     if window.process is None:
@@ -99,7 +100,7 @@ assert window.n_train_spin.value() == 8
 assert window.knob_table.item(0, 3).text() == '2.0'
 window._commit_plan()
 assert len(window.project.entries) == 14  # an LHS setting already covers a boundary
-assert window.pages.currentIndex() == 2
+assert window.current_step() == "capture"
 assert not window.capture_next_button.isEnabled()  # no route proof
 assert not window.loopback_check.isChecked()
 # A known route-test result allows recording only after setup confirmations;
@@ -160,7 +161,7 @@ run.mkdir(parents=True)
 (run / 'status.json').write_text('{"status":"exported"}')
 (run / 'model_parametric.nam').write_text('{}')
 (run / 'metrics.json').write_text('{"epoch":2,"ESR":0.031}')
-window.go_to(4)
+window.go_to_step("review")
 assert '0.031' in window.review_metric.text()
 (run / 'metrics.json').write_text('{"tiers":{"standard":{"epoch":2,"ESR":0.021},"nano":{"epoch":2,"ESR":0.041}}}')
 window._show_run()
@@ -248,20 +249,20 @@ assert len(window._preview.entries) < 5000
 assert not window.control_editor.add_knob.isEnabled()
 # Geometry must work with larger layouts, not just the data pipeline.
 window.resize(800, 680)
-for stage in (0, 1, 2, 3, 4):
-    window.go_to(stage)
+for stage in ("connect", "plan", "capture", "train", "review"):
+    window.go_to_step(stage)
     QTest.qWait(80)
-    page = window.pages.widget(stage)
+    page = window.pages.currentWidget()
     assert page.horizontalScrollBar().maximum() == 0, (stage, page.widget().size())
-    if stage == 0:
+    if stage == "connect":
         assert window.control_editor.scroll.verticalScrollBar().maximum() > 0
         assert all(field.height() >= 34 for field in window.control_editor.rows.findChildren(QLineEdit))
-    if stage == 1:
+    if stage == "plan":
         assert window.quality_slider.width() >= 430
-    if stage == 3:
+    if stage == "train":
         assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
         assert window.training_profiles.height() >= window.training_profiles.minimumSizeHint().height()
-    if stage == 4:
+    if stage == "review":
         from parametric_mac.ui.widgets.common import Columns
         columns = page.findChild(Columns)
         first, second = [item.parentWidget() for item in columns.columns]
@@ -270,7 +271,7 @@ for stage in (0, 1, 2, 3, 4):
         heading = columns.columns[1].itemAt(0).widget()
         visible_gap = heading.mapTo(columns, QPoint(0, 0)).y() - window.folder_button.mapTo(columns, QPoint(0, window.folder_button.height())).y()
         assert 20 <= visible_gap <= 40, visible_gap
-    if stage == 2:
+    if stage == "capture":
         import math
         cols = max(1, min(3, window.knob_targets.width() // 170))
         assert window.knob_targets.height() >= math.ceil(len(window.knob_targets.targets)/cols)*165
@@ -279,7 +280,7 @@ for stage in (0, 1, 2, 3, 4):
         from parametric_mac.controls import format_controls
         assert window.queue_rows.itemAt(0).widget().text().startswith(format_controls(next_target.params, window.project.knob_specs()))
 window.resize(1140, 900)
-window.go_to(3)
+window.go_to_step("train")
 QTest.qWait(80)
 assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
 assert window.training_profiles.height() >= window.training_profiles.minimumSizeHint().height()

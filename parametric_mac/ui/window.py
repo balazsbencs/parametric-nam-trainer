@@ -59,10 +59,12 @@ class MacWindow(ShellMixin, ProjectMixin, JobsMixin, ConnectPageMixin, PlanPageM
         self.centralWidget().setFocus(Qt.OtherFocusReason)
 
 
-def launch(train_tab=False):
+def launch(train_tab: bool = False) -> int:
+    """Open the app on Start.
+
+    `train_tab` (from Train.command) is accepted for compatibility and ignored: the user picks the project on Start.
+    """
     app = QApplication.instance() or QApplication(sys.argv)
     window = MacWindow()
-    if train_tab:
-        window.go_to(3)
     window.show()
     return app.exec()

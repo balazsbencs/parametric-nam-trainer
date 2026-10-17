@@ -63,7 +63,7 @@ class CapturePageMixin:
         self.export_concat_button.setText("Export training configs")
         extra.addWidget(self.export_concat_button)
         disclosure(reference, "Advanced capture tools", maintenance)
-        self.capture_continue = button("Continue to training", lambda: self.go_to(3), True)
+        self.capture_continue = button("Continue to training", lambda: self.go_to_step("train"), True)
         layout.addWidget(self.capture_continue, alignment=Qt.AlignRight)
 
     def _show_selected_target(self):
