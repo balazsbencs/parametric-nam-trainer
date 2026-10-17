@@ -130,6 +130,7 @@ class ShellMixin:
 
     def _wire_signals(self):
         self._mutating = [self.new_button, self.open_button, self.new_action, self.open_action, self.pedal_name,
+                          self.device_combo, self.wire_check,
                           self.gear_next_button, self.gear_change_link, self.gear_new_link,
                           self.control_editor, self.gear_kind, self.fixed_notes, self.audio_controls,
                           self.route_test_button, self.plan_advanced, self.quality_slider,
@@ -143,8 +144,6 @@ class ShellMixin:
             spin.valueChanged.connect(self._custom_plan)
         self.include_corners_check.toggled.connect(self._custom_plan)
         self.confirm_knobs.toggled.connect(self._sync_states)
-        for check in (self.reamp_check, self.monitor_check, self.level_check):
-            check.toggled.connect(self._sync_states)
         self.pedal_name.editingFinished.connect(self._save_details)
         self.fixed_notes.editingFinished.connect(self._save_details)
         self.pedal_name.textChanged.connect(lambda *_: self._refresh_gear(effort=False))
@@ -217,6 +216,8 @@ class ShellMixin:
         if not self.project:
             starting = hasattr(self, "pages") and self.current_step() in ("start", "gear")
             return "" if starting else "Go to Start to create or open a project."
+        if not self.project.entries:
+            return "No recordings planned yet"
         return f"{len(self.project.captured_entries())} of {len(self.project.entries)} recordings saved"
 
     def _refresh_all(self):
@@ -258,6 +259,7 @@ class ShellMixin:
     def _sync_states(self, *args):
         if not self._ready:
             return
+        self._refresh_rates()
         busy = self._busy()
         for widget in self._mutating:
             widget.setEnabled(not busy)
@@ -272,8 +274,9 @@ class ShellMixin:
         self.plan_button.setText("Continue capturing" if locked else "Start capturing")
         self.plan_button.setEnabled(not busy and self.project is not None and self._preview is not None)
         self.connect_button.setEnabled(not busy and self.project is not None and self._route_ready())
-        self.route_test_button.setEnabled(not busy and self.device_combo.currentData() is not None
-                                          and self.reamp_check.isChecked() and self.monitor_check.isChecked() and self.level_check.isChecked())
+        self.route_test_button.setEnabled(not busy and self._has_device() and self.wire_check.isChecked()
+                                          and self._rate_problem() is None)
+        self._sync_connect()
         complete = bool(self.project and self.project.entries and not self.project.pending_entries())
         can_record = not busy and self._route_ready() and self.confirm_knobs.isChecked() and not self._current_sample_rate_warnings()
         self.capture_next_button.setEnabled(can_record and self._next_pending_entry() is not None)
@@ -293,7 +296,7 @@ class ShellMixin:
         self._sync_gear_lock()
         self._refresh_steps()
         if self.project and self.project.entries and not self._route_ready() and not busy:
-            self.capture_hint.setText("Return to Connect: confirm the setup and pass Test connection before recording. "
+            self.capture_hint.setText("Go to Connect and check the level before recording. "
                                       + f"Keep fixed: {self.fixed_notes.text()}")
 
     def closeEvent(self, event):

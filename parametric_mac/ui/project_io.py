@@ -30,8 +30,7 @@ class ProjectMixin:
         self.train_log.clear()
         self.train_progress.setValue(0)
         self.retry_button.hide()
-        for check in (self.reamp_check, self.monitor_check, self.level_check):
-            check.setChecked(False)
+        self._reset_connect()
         # A new capture never inherits the old project's level or runs.
         self._quality = RECOMMENDED_LEVEL
         self._apply_quality(RECOMMENDED_LEVEL)
@@ -57,8 +56,7 @@ class ProjectMixin:
                           "gear_kind": "amp" if self.gear_kind.currentIndex() else "pedal",
                           "model_architecture": self.model_architecture.currentData()}
         self._route_fingerprint = None
-        for check in (self.reamp_check, self.monitor_check, self.level_check):
-            check.setChecked(False)
+        self._reset_connect()
         self.capture_log.clear()
         self.train_log.clear()
         self.train_progress.setValue(0)
@@ -115,8 +113,7 @@ class ProjectMixin:
         self.train_metric.setText("Validation results will appear during training.")
         self.retry_button.hide()
         self.status_label.setText("Project opened. Check completed recordings before training.")
-        for check in (self.reamp_check, self.monitor_check, self.level_check):
-            check.setChecked(False)
+        self._reset_connect()
         notes = self._recover_and_reconcile()
         if notes:
             self.capture_feedback.setText("\n".join(notes))
@@ -133,25 +130,29 @@ class ProjectMixin:
         self.go_to_step(resume_step(project_status(self.project_dir)))
 
     def _route_ready(self):
-        return (self._route_fingerprint is not None
-                and self._route_fingerprint == self._current_audio_settings().stream_fingerprint()
-                and all(c.isChecked() for c in (self.reamp_check, self.monitor_check, self.level_check)))
+        return self._connect_ready()
 
     def _on_route_test(self):
         if self._busy():
             return
         self._route_fingerprint = None
+        self._show_level(None)
+        self.route_test_progress.show()
         super()._on_route_test()
         self._sync_states()
 
     def _on_route_test_success(self, result):
         super()._on_route_test_success(result)
-        if result.ok and not result.loopback_failed and not result.loopback_disagreement and result.peak < -1:
+        self.route_test_progress.hide()
+        reason = self.level_result.text().replace("⚠", "").strip()
+        clean = result.ok and not result.loopback_failed and not result.loopback_disagreement
+        self._show_level(result.peak if clean else None)
+        if clean and self._level_state == "ok":
             self._route_fingerprint = self._current_audio_settings().stream_fingerprint()
         else:
             self._route_fingerprint = None
-            if result.ok and result.peak >= -1:
-                self.route_test_result_label.setText("Signal is too close to clipping. Lower levels, then test again before recording.")
+            if not clean:  # Keep upstream's specific reason, without the warning sign.
+                self.level_result.setText(reason or "The check did not pass. Check the cables and channels, then check again.")
         self._sync_states()
 
     def _refresh_sample_rate_warning(self):
