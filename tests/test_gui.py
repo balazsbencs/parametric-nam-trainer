@@ -226,6 +226,10 @@ for i in range(17):
 assert len(window.control_editor.controls) == 24
 assert window._preview is not None
 assert len(window._preview.entries) < 5000
+# A Gear edit drops a plan without takes; commit the 24-control plan again, as a user would.
+assert not window.project.entries
+window._commit_plan()
+assert window.project.entries
 assert not window.control_editor.add_knob.isEnabled()
 # Geometry must work with larger layouts, not just the data pipeline.
 window.resize(800, 680)
