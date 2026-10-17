@@ -104,7 +104,7 @@ class ProjectMixin:
         self.gear_kind.setCurrentIndex(1 if self._workflow.get("gear_kind") == "amp" else 0)
         self._gear_changed()
         self.knob_names.setText(", ".join(row[0] for row in self._knob_table_rows()))
-        self.quality_slider.setValue(self._quality if self._quality is not None else 2)
+        self._sync_card_selection()
         self._applying = False
         self._route_fingerprint = None
         self.capture_log.clear()

@@ -25,7 +25,7 @@ from parametric_mac.ui.shell import STEPS
 assert window.pages.count() == len(STEPS)
 assert not window.train_button.isEnabled()
 assert not window.capture_next_button.isEnabled()
-assert window.quality_slider.value() == 2
+assert window.quality_cards[1].selected and window._quality == 2
 assert window.model_architecture.currentData() == 'a2-dual'
 assert window.effort_label.text().startswith('~40 recordings')
 window.project_dir = Path(sys.argv[1])
@@ -95,12 +95,12 @@ assert window.export_concat_button.text() == 'Export training configs'
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('film-nano'))
 assert 'selected model size' in window.architecture_hint.text()
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('auto'))
-window.quality_slider.setValue(0)
+window._select_level(0)
 assert window.n_train_spin.value() == 8
 assert window.knob_table.item(0, 3).text() == '2.0'
 window._commit_plan()
 assert len(window.project.entries) == 14  # an LHS setting already covers a boundary
-assert window.current_step() == "capture"
+assert window.current_step() == "record"
 assert not window.capture_next_button.isEnabled()  # no route proof
 assert not window.loopback_check.isChecked()
 # A known route-test result allows recording only after setup confirmations;
@@ -123,8 +123,8 @@ assert window._worker is None
 assert not window.confirm_knobs.isChecked()  # cannot mislabel a pending take
 # Manual sampling is visibly custom; the slider restores complete defaults.
 window.n_train_spin.setValue(9)
-assert window.quality_name.text() == 'Custom capture plan'
-window.quality_slider.setValue(2)
+assert window._quality is None and not any(c.selected for c in window.quality_cards)
+window._select_level(2)
 assert window.n_train_spin.value() == 30
 window._commit_plan()
 assert len(window.project.entries) == 40
@@ -136,13 +136,13 @@ path.parent.mkdir(parents=True, exist_ok=True)
 shutil.copy2(root / 'input.wav', path)
 save_project(window.project, fresh)
 window._on_capture_success(QAModel(peak=-16, messages=[]))
-assert not window.quality_slider.isEnabled()
+assert not any(c.isEnabled() for c in window.quality_cards)
 assert not window.plan_advanced.isEnabled()
 assert not window.separate_button.isHidden()
 labels = [(e.params, e.y_path) for e in window.project.entries]
 window._open_project(fresh)
 assert [(e.params, e.y_path) for e in window.project.entries] == labels
-assert not window.quality_slider.isEnabled()
+assert not any(c.isEnabled() for c in window.quality_cards)
 assert window._quality == 2
 assert window._workflow['plan_locked']
 window.epochs.setValue(7)
@@ -213,7 +213,7 @@ def save_positions():
 QTimer.singleShot(20, save_positions)
 window.control_editor.edit(6)
 assert window.control_editor.controls[-1].enum_names == ('Normal', 'Bright', 'Brighter')
-window.quality_slider.setValue(0)
+window._select_level(0)
 window._commit_plan()
 assert {(e.params['Bright']) for e in window.project.entries_for_split('validation')} == {0, 1, 2}
 window._open_project(second)
@@ -229,16 +229,15 @@ assert len(window._preview.entries) < 5000
 assert not window.control_editor.add_knob.isEnabled()
 # Geometry must work with larger layouts, not just the data pipeline.
 window.resize(800, 680)
-for stage in ("gear", "connect", "plan", "capture", "train", "review"):
+for stage in ("gear", "connect", "record", "train", "review"):
     window.go_to_step(stage)
     QTest.qWait(80)
     page = window.pages.currentWidget()
+    page = page.currentWidget() if hasattr(page, "currentWidget") else page  # Record holds two states
     assert page.horizontalScrollBar().maximum() == 0, (stage, page.widget().size())
     if stage == "gear":
         assert window.control_editor.scroll.verticalScrollBar().maximum() > 0
         assert all(field.height() >= 34 for field in window.control_editor.rows.findChildren(QLineEdit))
-    if stage == "plan":
-        assert window.quality_slider.width() >= 430
     if stage == "train":
         assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
         assert window.training_profiles.height() >= window.training_profiles.minimumSizeHint().height()
@@ -251,7 +250,7 @@ for stage in ("gear", "connect", "plan", "capture", "train", "review"):
         heading = columns.columns[1].itemAt(0).widget()
         visible_gap = heading.mapTo(columns, QPoint(0, 0)).y() - window.folder_button.mapTo(columns, QPoint(0, window.folder_button.height())).y()
         assert 20 <= visible_gap <= 40, visible_gap
-    if stage == "capture":
+    if stage == "record":
         import math
         cols = max(1, min(3, window.knob_targets.width() // 170))
         assert window.knob_targets.height() >= math.ceil(len(window.knob_targets.targets)/cols)*165

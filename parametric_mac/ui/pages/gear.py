@@ -4,6 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLineEdit, QPushButton, QVBoxLayout, QWidget
 from nam.capture.project import save_project
+from nam.capture.session import CaptureSession
 
 from ...control_editor import ControlEditor, starter, swap_starter
 from ...controls import ControlModel
@@ -272,7 +273,12 @@ class GearPageMixin:
             self._apply_quality(self._quality)
         else:
             self._refresh_preview()
-        # Draft control edits never relabel an existing saved capture plan.
+        # Draft control edits never relabel a plan with takes (_plan_locked returns above). A committed plan
+        # without takes is dropped, so Record builds a new one from these controls.
+        if self.project and self.project.entries and not self.project.captured_entries():
+            self.project = self.project.model_copy(update={"entries": []})
+            self.session = CaptureSession(self.project, self.project_dir)
+            self._record_choosing = False
         if self.project and not self.project.entries:
             self.project.knobs = [ControlModel.from_spec(c) for c in self.control_editor.controls]
             save_project(self.project, self.project_dir)

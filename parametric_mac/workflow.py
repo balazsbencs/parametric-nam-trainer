@@ -26,6 +26,14 @@ QUALITIES = (
 
 
 RECOMMENDED_LEVEL = 2  # "Good"
+# The three levels on the Record page: (card title, index into QUALITIES). Decent (1) and Overkill (4) are Expert.
+MAIN_LEVELS: tuple[tuple[str, int], ...] = (("Fast", 0), ("Good", 2), ("Max", 3))
+_MAIN_NAMES = {index: name for name, index in MAIN_LEVELS}
+
+
+def level_label(index: int) -> str:
+    """The name the Record page shows for a stored quality index."""
+    return _MAIN_NAMES.get(index, QUALITIES[index].name)
 
 
 def quality_settings(knobs, level):

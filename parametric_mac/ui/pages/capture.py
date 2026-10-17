@@ -10,8 +10,8 @@ from ..widgets.knobs import KnobTargets
 
 
 class CapturePageMixin:
-    def _capture_page(self):
-        layout = self._page("Capture one setting at a time", "Set the knobs, confirm their positions, then record. Keep all other controls fixed.")
+    def _capture_page(self, stack=None):
+        layout = self._page("Capture one setting at a time", "Set the knobs, confirm their positions, then record. Keep all other controls fixed.", stack)
         columns = Columns(layout)
         layout, reference = columns.columns
         layout.parentWidget().setObjectName('route')

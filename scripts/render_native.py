@@ -26,7 +26,7 @@ window._commit_plan()
 files = []
 for name, size in [('desktop', (1140, 900)), ('compact', (800, 680))]:
     window.resize(*size)
-    for index, stage in enumerate(('connect', 'plan', 'capture', 'train', 'review')):
+    for index, stage in enumerate(('gear', 'connect', 'record', 'train', 'review')):
         if stage == 'review':
             # Load a real native capture manifest and CPU export from pytest.
             window._open_project(args.run_project.resolve())
@@ -61,7 +61,7 @@ assert window.process is None
 app.processEvents()
 window.grab().save(str(out / 'train-error-desktop.png'))
 window._open_project(folder)
-window.go_to_step("plan")
+window.go_to_step("record")
 window.plan_advanced_toggle.setChecked(True)
 window.resize(800, 680)
 app.processEvents()
@@ -71,22 +71,22 @@ window.grab().save(str(out / 'plan-advanced-compact.png'))
 window.plan_advanced_toggle.setChecked(False)
 window.resize(1140, 900)
 for level, name in ((0, 'quick'), (4, 'overkill')):
-    window.quality_slider.setValue(level)
+    window._select_level(level)
     app.processEvents()
     window.grab().save(str(out / f'plan-{name}-desktop.png'))
 window._open_project(args.run_project)
-window.go_to_step("plan")
+window.go_to_step("record")
 app.processEvents()
 window.grab().save(str(out / 'plan-locked-desktop.png'))
 # Amp layout and switch targets use a genuinely planned pending project.
 amp_folder = Path(tempfile.mkdtemp(prefix='parametric-amp-evidence-'))
 window._create_project(amp_folder)
 window._use_starter(True)
-window.quality_slider.setValue(0)
+window._select_level(0)
 window._commit_plan()
 for name, size in [('desktop', (1140, 900)), ('compact', (800, 680))]:
     window.resize(*size)
-    for stage, index in [('amp-controls', 'connect'), ('amp-targets', 'capture')]:
+    for stage, index in [('amp-controls', 'connect'), ('amp-targets', 'record')]:
         window.go_to_step(index)
         app.processEvents()
         QTest.qWait(80)
