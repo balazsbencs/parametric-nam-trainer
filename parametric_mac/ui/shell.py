@@ -13,6 +13,7 @@ from .widgets.shell_bars import Footer, Step, StepBar, TopBar  # noqa: F401
 # Transitional order: later page tasks edit only this tuple (final: start, gear, connect, record, train, listen).
 STEPS: tuple[Step, ...] = (
     Step("start", "Start", False),
+    Step("gear", "Gear", True),
     Step("connect", "Connect", True),
     Step("plan", "Plan", True),
     Step("capture", "Capture", True),
@@ -21,7 +22,7 @@ STEPS: tuple[Step, ...] = (
 )
 STEP_KEYS = tuple(step.key for step in STEPS)
 # Final step names that do not exist yet in the transitional STEPS (removed by Tasks 7, 9 and 12).
-STEP_ALIASES = {"gear": "connect", "record": "capture", "listen": "review"}
+STEP_ALIASES = {"record": "capture", "listen": "review"}
 APPEARANCE_CHOICES = (("system", "Match macOS"), ("light", "Light"), ("dark", "Dark"))
 
 
@@ -85,6 +86,7 @@ class ShellMixin:
 
     def _build_pages(self):
         self._build_start_page()
+        self._build_gear_page()
         self._connect_page()
         self._plan_page()
         self._capture_page()
@@ -93,7 +95,7 @@ class ShellMixin:
         # Transitional until Task 10: Record keeps one filled button (Record this setting).
         self.capture_continue.setProperty("primary", False)
         self.capture_continue.setProperty("outline", True)
-        actions = {"start": None, "connect": self.connect_button, "plan": self.plan_button,
+        actions = {"start": None, "gear": self._gear_footer, "connect": self.connect_button, "plan": self.plan_button,
                    "capture": self.capture_continue, "train": self.train_continue, "review": self.save_model_button}
         for key in STEP_KEYS:
             self.footer.add_action(key, actions[key])
@@ -113,9 +115,9 @@ class ShellMixin:
         menu.addActions(self.appearance_actions)
         self.top_bar.appearance_button.setMenu(menu)
         file_menu = self.menuBar().addMenu("File")
-        self.new_action = file_menu.addAction("New capture…", self._on_new_project)
+        self.new_action = file_menu.addAction("New capture…", lambda: self._start_new_capture())
         self.new_action.setShortcut(QKeySequence.New)
-        self.open_action = file_menu.addAction("Open folder…", self._on_open_project)
+        self.open_action = file_menu.addAction("Open folder…", lambda: self._on_open_project())
         self.open_action.setShortcut(QKeySequence.Open)
         view = self.menuBar().addMenu("View")
         view.addMenu("Appearance").addActions(self.appearance_actions)
@@ -128,6 +130,7 @@ class ShellMixin:
 
     def _wire_signals(self):
         self._mutating = [self.new_button, self.open_button, self.new_action, self.open_action, self.pedal_name,
+                          self.gear_next_button, self.gear_change_link, self.gear_new_link,
                           self.control_editor, self.gear_kind, self.fixed_notes, self.audio_controls,
                           self.route_test_button, self.plan_advanced, self.quality_slider,
                           self.plan_button, self.check_button, self.train_button,
@@ -144,6 +147,8 @@ class ShellMixin:
             check.toggled.connect(self._sync_states)
         self.pedal_name.editingFinished.connect(self._save_details)
         self.fixed_notes.editingFinished.connect(self._save_details)
+        self.pedal_name.textChanged.connect(lambda *_: self._refresh_gear(effort=False))
+        self.fixed_notes.textChanged.connect(lambda *_: self._refresh_gear(effort=False))
         self.control_editor.changed.connect(self._controls_changed)
         self.gear_kind.currentIndexChanged.connect(self._gear_changed)
         self.review_check.toggled.connect(self._save_review)
@@ -190,6 +195,7 @@ class ShellMixin:
         project = getattr(self, "project", None)
         complete = bool(project and project.entries and not project.pending_entries())
         flags = {"start": getattr(self, "project_dir", None) is not None,
+                 "gear": getattr(self, "project_dir", None) is not None,
                  "connect": bool(project) and self._route_ready(),
                  "plan": bool(project and project.entries), "capture": complete,
                  "train": self._exported_run() is not None, "review": False}
@@ -209,8 +215,8 @@ class ShellMixin:
         if self._worker:
             return "Audio operation running…"
         if not self.project:
-            on_start = hasattr(self, "pages") and self.current_step() == "start"
-            return "" if on_start else "Go to Start to create or open a project."
+            starting = hasattr(self, "pages") and self.current_step() in ("start", "gear")
+            return "" if starting else "Go to Start to create or open a project."
         return f"{len(self.project.captured_entries())} of {len(self.project.entries)} recordings saved"
 
     def _refresh_all(self):
@@ -284,6 +290,7 @@ class ShellMixin:
         self.save_model_button.setEnabled(not busy and self._exported_run() is not None)
         self.footer.set_status(self._status_text())
         self._sync_recent_rows()
+        self._sync_gear_lock()
         self._refresh_steps()
         if self.project and self.project.entries and not self._route_ready() and not busy:
             self.capture_hint.setText("Return to Connect: confirm the setup and pass Test connection before recording. "

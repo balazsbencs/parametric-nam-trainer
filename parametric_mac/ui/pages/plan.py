@@ -97,8 +97,8 @@ class PlanPageMixin:
         self.quality_slider.valueChanged.connect(self._apply_quality)
         layout.addWidget(self.quality_slider)
         layout.addWidget(themed(QualityStops(), self.appearance))
-        self.effort_label = label("", "section")
-        layout.addWidget(self.effort_label)
+        self.plan_effort_label = label("", "section")
+        layout.addWidget(self.plan_effort_label)
         layout = outer
         self.plan_summary = label("", "muted")
         layout.addWidget(self.plan_summary)
@@ -126,7 +126,7 @@ class PlanPageMixin:
         queue_layout = QVBoxLayout(queue)
         queue_layout.addWidget(self.plan_table)
         disclosure(layout, "View saved capture plan", queue)
-        self.separate_button = button("Create a separate project…", self._on_new_project)
+        self.separate_button = button("Start a new capture with these controls", lambda: self._new_capture_from_gear())
         self.separate_button.setVisible(False)
         layout.addWidget(self.separate_button, alignment=Qt.AlignLeft)
         self.plan_button = button("Start capturing", self._commit_plan, True)
@@ -185,13 +185,13 @@ class PlanPageMixin:
             train = len(self._preview.entries_for_split("train"))
             tests = len(self._preview.entries_for_split("validation"))
             seconds = self._input_durations()
-            self.effort_label.setText(f"{train + tests} recordings · about {recording_minutes(self._preview, *seconds)} minutes")
+            self.plan_effort_label.setText(f"{train + tests} recordings · about {recording_minutes(self._preview, *seconds)} minutes")
             self.plan_summary.setText(f"{train} training recordings · {tests} unseen test recordings\n"
                                       + "Modeling: " + ", ".join(k.name for k in self._preview.knob_specs())
                                       + f" · {switch_combinations(self._preview.knob_specs())} switch combination(s)\nKeep fixed: {self.fixed_notes.text()}\nEstimate allows 10 seconds to set controls; breaks and retries add time.")
         except ValueError as exc:
             self._preview = None
-            self.effort_label.setText("Adjust your capture settings")
+            self.plan_effort_label.setText("Adjust your capture settings")
             self.plan_summary.setText(str(exc))
         self._refresh_corner_count()
         self._sync_states()

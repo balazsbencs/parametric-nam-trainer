@@ -7,7 +7,7 @@ from parametric_mac.ui.tokens import DARK, LIGHT
 ROOT = Path(__file__).resolve().parents[1]
 HEX = re.compile(r"#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b")
 # Files that still hold old literals; later tasks delete or convert them and shrink this set to empty (Task 12 asserts empty).
-LEGACY_COLOR_FILES = {"parametric_mac/control_editor.py"}
+LEGACY_COLOR_FILES: set[str] = set()
 COLOR = re.compile(r"#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b|QColor\(\s*\d|rgba?\(")
 
 

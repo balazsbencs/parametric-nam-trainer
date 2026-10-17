@@ -27,7 +27,7 @@ assert not window.train_button.isEnabled()
 assert not window.capture_next_button.isEnabled()
 assert window.quality_slider.value() == 2
 assert window.model_architecture.currentData() == 'a2-dual'
-assert window.effort_label.text().startswith('40 recordings')
+assert window.effort_label.text().startswith('~40 recordings')
 window.project_dir = Path(sys.argv[1])
 # This legacy test fixture deliberately uses a short, non-A2 network.
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('auto'))
@@ -228,12 +228,12 @@ assert len(window._preview.entries) < 5000
 assert not window.control_editor.add_knob.isEnabled()
 # Geometry must work with larger layouts, not just the data pipeline.
 window.resize(800, 680)
-for stage in ("connect", "plan", "capture", "train", "review"):
+for stage in ("gear", "connect", "plan", "capture", "train", "review"):
     window.go_to_step(stage)
     QTest.qWait(80)
     page = window.pages.currentWidget()
     assert page.horizontalScrollBar().maximum() == 0, (stage, page.widget().size())
-    if stage == "connect":
+    if stage == "gear":
         assert window.control_editor.scroll.verticalScrollBar().maximum() > 0
         assert all(field.height() >= 34 for field in window.control_editor.rows.findChildren(QLineEdit))
     if stage == "plan":

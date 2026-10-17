@@ -2,13 +2,9 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
-    QComboBox, QCheckBox, QLineEdit,
+    QCheckBox,
 )
-from nam.capture.project import save_project
-from ...controls import ControlModel
-from ...control_editor import ControlEditor, starter
 from ...theme import icon
-from ...workflow import write_state
 from ..widgets.common import label, button, disclosure, field, Columns
 
 
@@ -17,35 +13,6 @@ class ConnectPageMixin:
         layout = self._page("Connect your gear", "A clean, repeatable route is the foundation of a good model. Set up once, then keep levels fixed.")
         columns = Columns(layout)
         left, right = columns.columns
-        left.addWidget(label("Your project", "section"))
-        details = QVBoxLayout()
-        details.setSpacing(12)
-        self.pedal_name = QLineEdit("My pedal")
-        self.gear_kind = QComboBox()
-        self.gear_kind.addItems(["Pedal", "Amp"])
-        self.fixed_notes = QLineEdit("Level at 5")
-        self.knob_names = QLineEdit("Drive, Tone")
-        self.knob_names.hide()
-        identity = QHBoxLayout()
-        identity.setSpacing(12)
-        identity.addWidget(field('Name', self.pedal_name), 3)
-        identity.addWidget(field('Gear', self.gear_kind), 1)
-        details.addLayout(identity)
-        details.addWidget(field('Keep fixed', self.fixed_notes))
-        left.addLayout(details)
-        left.addSpacing(10)
-        left.addWidget(label("Controls to model", "section"))
-        left.addWidget(label("Add the knobs and switches you want in the model. Leave other controls fixed.", "muted"))
-        self.control_editor = ControlEditor()
-        left.addWidget(self.control_editor)
-        presets = QHBoxLayout()
-        presets.setContentsMargins(0, 0, 0, 0)
-        presets.addWidget(button("Pedal starter", lambda: self._use_starter(False)))
-        presets.addWidget(button("Amp starter", lambda: self._use_starter(True)))
-        self.starter_actions = QWidget()
-        self.starter_actions.setLayout(presets)
-        left.addWidget(self.starter_actions)
-        left.addSpacing(10)
         left.addWidget(label("Your recording setup", "section"))
         self.audio_controls = QWidget()
         form = QVBoxLayout(self.audio_controls)
@@ -135,40 +102,6 @@ class ConnectPageMixin:
         layout.addWidget(self.connect_button, alignment=Qt.AlignRight)
         layout.addStretch()
 
-    def _mirror_controls(self):
-        was_applying = self._applying
-        self._applying = True
-        self.knob_table.setRowCount(0)
-        for c in self.control_editor.controls:
-            self._add_knob_row(c.name, c.min, c.max, c.step, c.avoid_zero, c.is_gain)
-        self.knob_names.setText(", ".join(c.name for c in self.control_editor.controls))
-        self._applying = was_applying
-
-    def _controls_changed(self):
-        if self._busy() or self._plan_locked():
-            return
-        self._mirror_controls()
-        if self._quality is not None:
-            self._apply_quality(self._quality)
-        else:
-            self._refresh_preview()
-        # Draft control edits never relabel an existing saved capture plan.
-        if self.project and not self.project.entries:
-            self.project.knobs = [ControlModel.from_spec(c) for c in self.control_editor.controls]
-            save_project(self.project, self.project_dir)
-        if self.project:
-            self._workflow['draft_controls'] = [ControlModel.from_spec(c).model_dump() for c in self.control_editor.controls]
-            write_state(self.project_dir, self._workflow)
-
-    def _use_starter(self, amp):
-        if self._busy() or self._plan_locked():
-            return
-        self.gear_kind.setCurrentIndex(int(amp))
-        self.control_editor.set_controls(starter(amp))
-        self.fixed_notes.setText('Cabinet / load-box settings fixed' if amp else 'Level at 5')
-        self._controls_changed()
-        self._save_details()
-
     def _update_route_caption(self, *args):
         self.route_caption.setText(f'Capture route · channels {self.output_channel_spin.value()} → {self.input_channel_spin.value()}')
 
@@ -185,12 +118,3 @@ class ConnectPageMixin:
         if self._ready and not self._applying:
             self._save_details()
 
-    def _save_details(self):
-        if not self.project or self._busy() or self._plan_locked():
-            return
-        self.project.name = self.pedal_name.text().strip() or self.project_dir.name
-        save_project(self.project, self.project_dir)
-        self._workflow["fixed_notes"] = self.fixed_notes.text()
-        self._workflow["gear_kind"] = "amp" if self.gear_kind.currentIndex() else "pedal"
-        write_state(self.project_dir, self._workflow)
-        self._refresh_all()

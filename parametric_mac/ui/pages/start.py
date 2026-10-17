@@ -92,8 +92,8 @@ class StartPageMixin:
         headline = label("Turn your pedal into a model you can still turn the knobs on.", "title")
         intro = label("You record your gear at many knob positions. Your Mac learns how it sounds. "
                       "You get one .nam file with real controls.", "muted")
-        self.new_button = button("New capture", self._on_new_project, True)
-        self.open_button = button("Open folder…", self._on_open_project)
+        self.new_button = button("New capture", lambda: self._start_new_capture(), True)
+        self.open_button = button("Open folder…", lambda: self._on_open_project())
         self.open_button.setProperty("outline", True)
         actions = QHBoxLayout()
         actions.addWidget(self.new_button)

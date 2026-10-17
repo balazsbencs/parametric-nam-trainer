@@ -25,6 +25,9 @@ QUALITIES = (
 )
 
 
+RECOMMENDED_LEVEL = 2  # "Good"
+
+
 def quality_settings(knobs, level):
     quality = QUALITIES[level]
     all_controls = knobs
