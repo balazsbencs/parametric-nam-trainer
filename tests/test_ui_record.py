@@ -166,6 +166,7 @@ assert window.capture_continue.property("primary") and not window.capture_contin
 def capture_shown(qa):
     entry = window._shown_entry
     entry.status = "captured"; entry.delay = 0
+    entry.qa = qa
     target = window.project_dir / entry.y_path; target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(inputs / "validation.wav", target); save_project(window.project, window.project_dir)
     window._recording_entry = entry
@@ -184,11 +185,10 @@ assert window.take_alert_new_capture.isVisible()
 assert window.record_button.text() == "Record again" and window._shown_entry is first
 assert window.setting_label.text() == "SETTING 1 / 40", window.setting_label.text()
 
-# A good take advances the setting.
-window._retry_entry = None; window._show_next_target()
+# A good replacement clears the clipped retry and advances the setting.
 capture_shown(QAModel(peak=-12.0, messages=[]))
 assert not window.take_alert.isVisible() and window.record_button.text() == "Record"
-assert window.setting_label.text() == "SETTING 3 / 40", window.setting_label.text()
+assert window.setting_label.text() == "SETTING 2 / 40", window.setting_label.text()
 assert "Good take" in window.last_take_label.text()
 
 # Review Focus 6: Space only records from the visible loop, never from a text field or another page.

@@ -131,6 +131,10 @@ class ConnectPageMixin:
         self.level_result.setText("")
         row.addWidget(self.level_result, 1)
         stage.body.addLayout(row)
+        self.level_new_capture = button("Start a new capture with these controls", self._new_capture_from_gear)
+        self.level_new_capture.setProperty("link", True)
+        self.level_new_capture.hide()
+        stage.body.addWidget(self.level_new_capture, alignment=Qt.AlignLeft)
         stage.body.addWidget(self.route_test_progress)
         self.route_test_progress.hide()  # shown only while a check runs
         return stage
@@ -213,6 +217,7 @@ class ConnectPageMixin:
         self.wire_stage.set_done(self.wire_check.isChecked())
         self.card_stage.set_done(self._has_device() and problem is None)
         self.level_stage.set_done(self._connect_ready())
+        self.level_new_capture.setVisible(self._level_state == "clip" and self._plan_locked())
 
     def _show_level(self, peak: float | None) -> None:
         self.level_meter.set_peak(peak)
@@ -220,7 +225,7 @@ class ConnectPageMixin:
             self._level_state = None
             self.level_result.setText("")
             return
-        self._level_state, text = level_message(peak)
+        self._level_state, text = level_message(peak, locked=self._plan_locked())
         self.level_result.setText(text)
         set_style_property(self.level_result, "role", "ok" if self._level_state == "ok" else "danger")
 

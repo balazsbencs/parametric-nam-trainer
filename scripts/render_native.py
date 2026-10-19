@@ -44,9 +44,10 @@ def synthetic_inputs() -> Path:
     return folder
 
 
-def save_take(window, entry, inputs: Path) -> None:
+def save_take(window, entry, inputs: Path, qa=None) -> None:
     from nam.capture.project import save_project
     entry.status, entry.delay = "captured", 0
+    entry.qa = qa
     target = window.project_dir / entry.y_path
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(inputs / "validation.wav", target)
@@ -120,16 +121,18 @@ def render_record(r: Renderer, inputs: Path) -> None:
     w.record_start_button.click()
     r.shoot("record-loop")
     entry = w._shown_entry
-    save_take(w, entry, inputs)
+    qa = QAModel(peak=0.0, clipping=True, messages=["Clipping detected"])
+    save_take(w, entry, inputs, qa)
     w._recording_entry = entry
-    w._on_capture_success(QAModel(peak=0.0, clipping=True, messages=["Clipping detected"]))
+    w._on_capture_success(qa)
     r.shoot("record-clipped")
 
 
 def render_train_and_listen(r: Renderer, inputs: Path) -> None:
+    from parametric_mac.workflow import take_needs_recording
     w = r.window
     for entry in w.project.entries:
-        if entry.status != "captured":
+        if take_needs_recording(entry):
             save_take(w, entry, inputs)
     w._retry_entry = None
     w._refresh_all()

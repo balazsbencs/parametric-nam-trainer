@@ -16,6 +16,7 @@ from parametric_mac.gui import MacWindow
 window = MacWindow(); window._inputs_dir = inputs
 window._has_device = lambda: True
 window._device_sample_rate = lambda: 48000
+window.input_channel_spin.setRange(1, 8)  # The mocked sound card has multiple inputs, even on a host with none.
 window.resize(1140, 900); window.show(); app.processEvents()
 window._start_new_capture(); window.gear_next_button.click(); app.processEvents()
 assert window.current_step() == "connect"

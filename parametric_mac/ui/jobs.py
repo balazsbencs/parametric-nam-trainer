@@ -7,6 +7,7 @@ import sys
 import time
 from PySide6.QtCore import QProcess, QProcessEnvironment, QTimer
 
+from ..workflow import takes_to_record
 from .copy import check_errors, minutes_left, parse_epoch_finished
 
 JOB_OUTPUT_TAIL = 200_000  # characters kept for the failure check; the full text is in the log
@@ -34,6 +35,9 @@ class JobsMixin:
         """Start training: check the recordings first, then train if the check passes."""
         if self._busy() or self.project_dir is None:
             return
+        if self.project and (not self.project.entries or takes_to_record(self.project)):
+            self.status_label.setText("Finish recording first. Replace any clipped takes.")
+            return
         self.train_alert.hide()
         self._train_after_check = True
         self._start("check")
@@ -41,7 +45,7 @@ class JobsMixin:
     def _start(self, command):
         if self._busy() or self.project_dir is None:
             return
-        if command == "train" and self.project and (not self.project.entries or self.project.pending_entries()):
+        if command == "train" and self.project and (not self.project.entries or takes_to_record(self.project)):
             self.status_label.setText("Finish recording first.")
             return
         if command == "qualify" and (self._selected_run is None or not self.playback_confirm.isChecked()):

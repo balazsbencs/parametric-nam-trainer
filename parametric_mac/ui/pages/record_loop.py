@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QApplication, QHBoxLayout, QProgressBar, QPushBut
 
 from ...controls import format_controls
 from ...theme import mono_font
-from ...workflow import write_state
+from ...workflow import take_needs_recording, takes_to_record, write_state
 from ..copy import take_message
 from ..widgets.common import PAGE_MARGIN, AlertBox, PageScroll, button, disclosure, label, set_style_property, themed
 from ..widgets.knobs import TargetControls, changed_controls
@@ -148,6 +148,8 @@ class RecordLoopMixin:
             self._begin_capture(entry)
 
     def _record_selected(self) -> None:
+        if self._busy():
+            return
         row = self.capture_table.currentRow()
         if 0 <= row < len(self._displayed_entries):
             self._retry_entry = self._displayed_entries[row]
@@ -204,13 +206,17 @@ class RecordLoopMixin:
             self._retry_entry = None
             self._show_next_target()
             return
+        self._show_retry_alert(qa, recorded)
+        self._sync_states()
+        self._focus_loop()
+
+    def _show_retry_alert(self, qa, recorded) -> None:
+        message = take_message(qa.clipping, qa.messages)
         self.take_alert.show_message(message.title, message.body, "error" if message.kind == "clipped" else "warning")
         self.take_alert_new_capture.setVisible(message.kind == "clipped")
         self.take_alert_keep.setVisible(message.kind == "warning")
         self._retry_entry = recorded
         self._show_target(recorded)
-        self._sync_states()
-        self._focus_loop()
 
     def _focus_loop(self) -> None:
         """Space records only from the loop page itself, so give focus back after a button hides."""
@@ -219,6 +225,8 @@ class RecordLoopMixin:
 
     def _keep_take(self) -> None:
         """A warning is advisory: the user may keep the saved take and move on. Clipped takes cannot."""
+        if self._busy() or (self._retry_entry and self._retry_entry.qa and self._retry_entry.qa.clipping):
+            return
         self._retry_entry = None
         self.take_alert.hide()
         self._show_next_target()
@@ -239,6 +247,8 @@ class RecordLoopMixin:
         super()._on_capture_cancelled()
 
     def _show_selected_target(self):
+        if self._busy():
+            return
         row = self.capture_table.currentRow()
         if 0 <= row < len(self._displayed_entries):
             entry = self._displayed_entries[row]
@@ -287,12 +297,18 @@ class RecordLoopMixin:
         return len(self.project.captured_entries()) + 1
 
     def _show_next_target(self) -> None:
-        self._show_target(self._next_pending_entry() if self.project else None)
+        entry = self._next_pending_entry() if self.project else None
+        self._show_target(entry)
+        if entry is not None and entry.qa and entry.qa.clipping:
+            self._show_retry_alert(entry.qa, entry)
         self._show_up_next()
 
+    def _next_pending_entry(self):
+        return next((entry for entry in self._entries_in_display_order() if take_needs_recording(entry)), None)
+
     def _show_up_next(self) -> None:
-        pending = [e for e in self._entries_in_display_order() if e.status == "pending" and e is not self._shown_entry]
-        specs = self.project.knob_specs()
+        pending = [e for e in self._entries_in_display_order() if take_needs_recording(e) and e is not self._shown_entry]
+        specs = self.project.knob_specs() if self.project else ()
         for item, entry in zip(self.up_next_labels, pending[:2] + [None, None]):
             item.setText(format_controls(entry.params, specs) if entry is not None else "")
             item.setVisible(entry is not None)
@@ -300,11 +316,12 @@ class RecordLoopMixin:
     def _refresh_record_loop(self) -> None:
         if not hasattr(self, "record_button") or not self.project:
             return
-        captured, total = len(self.project.captured_entries()), len(self.project.entries)
+        pending = takes_to_record(self.project)
+        total = len(self.project.entries)
+        captured = total - len(pending)
         self.progress_count.setText(f"{captured} / {total}")
         self.progress_bar.setRange(0, max(1, total))
         self.progress_bar.setValue(captured)
-        pending = self.project.pending_entries()
         train_s, test_s = self._input_durations()
         minutes = math.ceil(sum((train_s if e.split == "train" else test_s) + SECONDS_TO_SET for e in pending) / 60)
         self.time_left_label.setText(f"About {minutes} minutes left · saved after every take" if pending else "Every take is saved.")
@@ -321,6 +338,8 @@ class RecordLoopMixin:
         self.record_button.setEnabled(self._cancel_token is not None if recording else can_record and target is not None)
         self.capture_selected_button.setEnabled(can_record and self.capture_table.currentRow() >= 0)
         self.capture_continue.setEnabled(complete and not busy)
+        self.take_alert_keep.setEnabled(not busy)
+        self.take_alert_new_capture.setEnabled(not busy)
         self.change_level_link.setVisible(bool(self.project and self.project.entries) and not self._plan_locked())
         if self.project and self.project.entries and not self._route_ready() and not busy:
             self.capture_hint.setText("Go to Connect and check the level before recording. "

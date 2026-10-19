@@ -87,6 +87,15 @@ def recording_minutes(project, train_seconds=38, test_seconds=7):
                          for e in project.entries) / 60)
 
 
+def take_needs_recording(entry):
+    """A saved clipped WAV still needs replacing; advisory QA warnings may be kept."""
+    return entry.status == "pending" or bool(entry.qa and entry.qa.clipping)
+
+
+def takes_to_record(project):
+    return [entry for entry in project.entries if take_needs_recording(entry)] if project else []
+
+
 def read_state(directory):
     try:
         value = json.loads((Path(directory) / "workflow.json").read_text())

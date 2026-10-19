@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QMessageBox, QStackedWidget, QMenu,
     QScrollArea,
 )
+from ..workflow import takes_to_record
 from .widgets.common import PAGE_MARGIN, themed, label, PageScroll
 # StepBar is re-exported: tests and later pages import it from here.
 from .widgets.shell_bars import Footer, Step, StepBar, TopBar  # noqa: F401
@@ -127,7 +128,8 @@ class ShellMixin:
                           self.route_test_button, self.plan_advanced, *self.quality_cards, *self.more_level_buttons,
                           self.record_start_button, self.train_button, self.train_expert,
                           self.train_settings, self.capture_next_button, self.change_level_link,
-                          self.capture_selected_button, self.check_captures_button,
+                          self.capture_selected_button, self.capture_table, self.check_captures_button,
+                          self.take_alert_keep, self.take_alert_new_capture, self.level_new_capture,
                           self.clear_captures_button, self.export_concat_button,
                           self.separate_button, self.refresh_devices_button]
         self.knob_table.itemChanged.connect(self._custom_plan)
@@ -185,7 +187,7 @@ class ShellMixin:
 
     def _done_steps(self) -> set[str]:
         project = getattr(self, "project", None)
-        complete = bool(project and project.entries and not project.pending_entries())
+        complete = bool(project and project.entries and not takes_to_record(project))
         flags = {"start": getattr(self, "project_dir", None) is not None,
                  "gear": getattr(self, "project_dir", None) is not None,
                  "connect": bool(project) and self._route_ready(),
@@ -211,7 +213,8 @@ class ShellMixin:
             return "" if starting else "Go to Start to create or open a project."
         if not self.project.entries:
             return "No recordings planned yet"
-        return f"{len(self.project.captured_entries())} of {len(self.project.entries)} recordings saved"
+        total = len(self.project.entries)
+        return f"{total - len(takes_to_record(self.project))} of {total} recordings ready"
 
     def _refresh_all(self):
         super()._refresh_all()
@@ -249,7 +252,7 @@ class ShellMixin:
         self.route_test_button.setEnabled(not busy and self._has_device() and self.wire_check.isChecked()
                                           and self._rate_problem() is None)
         self._sync_connect()
-        complete = bool(self.project and self.project.entries and not self.project.pending_entries())
+        complete = bool(self.project and self.project.entries and not takes_to_record(self.project))
         can_record = not busy and self._route_ready() and not self._current_sample_rate_warnings()
         self.capture_next_button.setEnabled(can_record and self._next_pending_entry() is not None)
         self._sync_record_loop(busy, can_record, complete)

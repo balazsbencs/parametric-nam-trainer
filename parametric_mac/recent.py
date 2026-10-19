@@ -111,7 +111,9 @@ def project_status(path: Path) -> ProjectStatus:
     except Exception as exc:  # Any unreadable project must show a state, not crash Start.
         logging.getLogger(__name__).warning("Cannot read project %s: %s", folder, exc)
         return ProjectStatus("unreadable", "Cannot read this project", 0, 0)
-    captured, total = len(project.captured_entries()), len(project.entries)
+    from .workflow import takes_to_record
+    total = len(project.entries)
+    captured = total - len(takes_to_record(project))
     if total == 0:
         return ProjectStatus("new", "No recordings planned yet", 0, 0)
     if captured < total:

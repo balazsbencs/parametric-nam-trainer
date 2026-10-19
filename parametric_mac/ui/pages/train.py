@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QPlainTextEd
 
 from ...theme import mono_font
 
-from ...workflow import write_state
+from ...workflow import takes_to_record, write_state
 from ..widgets.common import (PAGE_MARGIN, AlertBox, ChoiceCard, PageScroll, button, disclosure, label,
                               set_style_property, themed)
 from ..widgets.meters import TrainingChart
@@ -187,7 +187,8 @@ class TrainPageMixin:
             return
         project = self.project
         total = len(project.entries) if project else 0
-        captured = len(project.captured_entries()) if project else 0
+        remaining = takes_to_record(project)
+        captured = total - len(remaining)
         ready = bool(total) and captured == total
         if project is None:
             text = "Create or open a project first." if self.project_dir is None else "Ready to check and train."
@@ -195,6 +196,8 @@ class TrainPageMixin:
             text = f"✓ {total} recordings are saved. The app checks them first, then trains."
         else:
             text = f"Finish recording first: {captured} of {total} takes saved."
+            if any(entry.qa and entry.qa.clipping for entry in remaining):
+                text += " Replace the clipped takes on Record."
         self.train_readiness.setText(text)
         self.train_go_record.setVisible(project is not None and not ready)
 

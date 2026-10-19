@@ -9,6 +9,8 @@ from typing import Literal
 ROUTE_CLIP_DBFS = -1.0
 
 CLIP_TEXT = "The signal is too close to clipping. Turn the reamp box or the sound card input down a little, then check again."
+LOCKED_CLIP_TEXT = ("The signal is too close to clipping. This project already has recordings, so keep the reamp box "
+                    "and sound card gain fixed. Start a new capture to set a lower level.")
 
 
 def _khz(rate: int) -> str:
@@ -23,9 +25,9 @@ def sample_rate_message(device_rate: int | None, file_rate: int | None) -> str |
             "then check again.")
 
 
-def level_message(peak_dbfs: float, clip_threshold: float = ROUTE_CLIP_DBFS) -> tuple[Literal["ok", "clip"], str]:
+def level_message(peak_dbfs: float, clip_threshold: float = ROUTE_CLIP_DBFS, *, locked: bool = False) -> tuple[Literal["ok", "clip"], str]:
     if peak_dbfs >= clip_threshold:
-        return "clip", CLIP_TEXT
+        return "clip", LOCKED_CLIP_TEXT if locked else CLIP_TEXT
     return "ok", f"Peak {peak_dbfs:.1f} dB · good. Do not touch the sound card gain from now on.".replace("-", "−", 1)
 
 
@@ -34,7 +36,8 @@ CONNECT_HELP = "\n".join((
     "Wrong sample rate: open Audio MIDI Setup, select your sound card and set it to 48 kHz.",
     "No signal comes back: check every cable, the reamp box and the power supply of your gear. "
     "Check that the output and input channels match the jacks you use.",
-    "Clipping: turn the reamp box output or the sound card input gain down a little, then check again.",
+    "Clipping: before the first take, lower the reamp box output or sound card input gain, then check again. "
+    "After recording starts, keep these levels fixed and start a new capture to set a lower level.",
 ))
 
 
