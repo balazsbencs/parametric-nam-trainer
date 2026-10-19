@@ -64,3 +64,15 @@ def test_check_errors_and_minutes_left():
 def test_check_errors_reads_cli_exceptions():
     from parametric_mac.ui.copy import check_errors
     assert check_errors("Error: capture_project.json is missing\n") == ("capture_project.json is missing",)
+
+
+def test_metric_lines_keep_the_honest_wording():
+    from parametric_mac.ui.copy import CHECKPOINT_NOTE, metric_lines
+    single = metric_lines({"epoch": 2, "ESR": 0.031})
+    assert single[0] == "Last logged validation ESR: 0.031 · epoch 2"
+    assert any("not a separate evaluation" in line for line in single)
+    tiers = metric_lines({"tiers": {"standard": {"epoch": 2, "ESR": 0.021}, "nano": {"epoch": 2}}})
+    assert tiers[0] == "Standard: last validation ESR 0.021 · epoch 2"
+    assert tiers[1] == "Nano: no validation ESR recorded"
+    assert metric_lines({}) == ("No validation metric recorded for this run. Inspect training.log for details.",)
+    assert CHECKPOINT_NOTE == "These settings also chose the best training round, so the match can look better than on new settings."

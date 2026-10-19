@@ -25,6 +25,14 @@ def changed_controls(previous: Mapping[str, float] | None, current: Mapping[str,
     return frozenset(name for name, value in current.items() if previous.get(name) != value)
 
 
+def control_value_text(control, value) -> str:
+    """A target as the user reads it: the number for a knob, the position name for a switch."""
+    if isinstance(control, SwitchSpec):
+        names = control.enum_names
+        return names[int(value)] if 0 <= int(value) < len(names) else f"{value:g}"
+    return f"{value:g}"
+
+
 def size_tier(count: int) -> Tier:
     return "large" if count <= 2 else "medium" if count <= 6 else "compact"
 
@@ -65,12 +73,7 @@ class TargetControls(Themed, QWidget):
         if self.height() != self.required_height():
             self._size()
 
-    @staticmethod
-    def _value_text(control, value) -> str:
-        if isinstance(control, SwitchSpec):
-            names = control.enum_names
-            return names[int(value)] if 0 <= int(value) < len(names) else f"{value:g}"
-        return f"{value:g}"
+    _value_text = staticmethod(control_value_text)
 
     def paintEvent(self, event):
         painter = QPainter(self)

@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--run-project', type=Path, required=True)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
-out = root / '.impeccable' / 'review' / 'native'
+out = root / '.impeccable' / 'listen' / 'native'
 out.mkdir(parents=True, exist_ok=True)
 app = QApplication([])
 window = MacWindow()
@@ -26,8 +26,8 @@ window._commit_plan()
 files = []
 for name, size in [('desktop', (1140, 900)), ('compact', (800, 680))]:
     window.resize(*size)
-    for index, stage in enumerate(('gear', 'connect', 'record', 'train', 'review')):
-        if stage == 'review':
+    for index, stage in enumerate(('gear', 'connect', 'record', 'train', 'listen')):
+        if stage == 'listen':
             # Load a real native capture manifest and CPU export from pytest.
             window._open_project(args.run_project.resolve())
             window.project.name = 'Synthetic trainer verification'

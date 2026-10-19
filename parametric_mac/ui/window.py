@@ -16,11 +16,11 @@ from .pages.connect import ConnectPageMixin
 from .pages.record import RecordPageMixin
 from .pages.record_loop import RecordLoopMixin
 from .pages.train import TrainPageMixin
-from .pages.review import ReviewPageMixin
+from .pages.listen import ListenPageMixin
 
 
 class MacWindow(ShellMixin, ProjectMixin, JobsMixin, StartPageMixin, GearPageMixin, ConnectPageMixin, RecordPageMixin, RecordLoopMixin,
-                TrainPageMixin, ReviewPageMixin, MainWindow):
+                TrainPageMixin, ListenPageMixin, MainWindow):
     def __init__(self):
         self.process = None
         self.stopping = False

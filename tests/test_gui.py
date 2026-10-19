@@ -37,8 +37,8 @@ assert window.process is not None
 assert not window.train_button.isEnabled()
 assert not window.new_button.isEnabled()
 assert not window.model_architecture.isEnabled()
-window.go_to_step("review")
-assert window.current_step() == "review"
+window.go_to_step("listen")
+assert window.current_step() == "listen"
 assert all(b.isEnabled() for b in window.top_bar.step_bar.buttons())
 for _ in range(400):
     if window.process is None:
@@ -160,17 +160,18 @@ run.mkdir(parents=True)
 (run / 'status.json').write_text('{"status":"exported"}')
 (run / 'model_parametric.nam').write_text('{}')
 (run / 'metrics.json').write_text('{"epoch":2,"ESR":0.031}')
-window.go_to_step("review")
+window.go_to_step("listen")
 assert '0.031' in window.review_metric.text()
 (run / 'metrics.json').write_text('{"tiers":{"standard":{"epoch":2,"ESR":0.021},"nano":{"epoch":2,"ESR":0.041}}}')
 window._show_run()
 assert 'Standard: last validation ESR 0.021' in window.review_metric.text()
 assert 'Nano: last validation ESR 0.041' in window.review_metric.text()
 assert window.save_model_button.isEnabled()
-window.review_check.setChecked(True)
-assert (run / 'review.json').is_file()
+for check in window.listen_checks:
+    check.setChecked(True)
+assert json.loads((run / 'review.json').read_text())['listened']
 window._refresh_runs()
-assert window.review_check.isChecked()
+assert all(check.isChecked() for check in window.listen_checks)
 # New project cannot overwrite existing captures, even via the private entry point.
 try:
     window._create_project(fresh, assets)
@@ -231,7 +232,7 @@ assert window.project.entries
 assert not window.control_editor.add_knob.isEnabled()
 # Geometry must work with larger layouts, not just the data pipeline.
 window.resize(800, 680)
-for stage in ("gear", "connect", "record", "train", "review"):
+for stage in ("gear", "connect", "record", "train", "listen"):
     window.go_to_step(stage)
     QTest.qWait(80)
     page = window.pages.currentWidget()
@@ -243,15 +244,6 @@ for stage in ("gear", "connect", "record", "train", "review"):
     if stage == "train":
         assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
         assert window.mode_cards[0].height() >= window.mode_cards[0].minimumSizeHint().height()
-    if stage == "review":
-        from parametric_mac.ui.widgets.common import Columns
-        columns = page.findChild(Columns)
-        first, second = [item.parentWidget() for item in columns.columns]
-        assert 20 <= second.y() - first.y() - first.height() <= 36
-        from PySide6.QtCore import QPoint
-        heading = columns.columns[1].itemAt(0).widget()
-        visible_gap = heading.mapTo(columns, QPoint(0, 0)).y() - window.folder_button.mapTo(columns, QPoint(0, window.folder_button.height())).y()
-        assert 20 <= visible_gap <= 40, visible_gap
     if stage == "record":
         import math
         assert window.knob_targets.height() >= window.knob_targets.required_height() > 0
