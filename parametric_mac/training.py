@@ -47,9 +47,15 @@ def mac_learning_config(original, device, epochs=200, batch=4):
     return config
 
 
-def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None):
+def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None, input_pad_db=None):
     directory = Path(directory).expanduser().resolve()
     state = read_state(directory)
+    calibration = copy.deepcopy(state.get("playback_calibration", {}))
+    if input_pad_db is not None:
+        import math
+        if isinstance(input_pad_db, bool) or not math.isfinite(input_pad_db) or not 0 <= input_pad_db <= 30:
+            raise ValueError("Playback input pad must be between 0 and 30 dB")
+        calibration = {"confirmed": True, "input_pad_db": float(input_pad_db)}
     architecture = architecture if architecture is not None else state.get("model_architecture", "auto")
     name = directory.name
     # Regenerate from the project's latest captures, even if configs were exported earlier.
@@ -82,7 +88,7 @@ def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None
     out.mkdir(parents=True, exist_ok=False)
     manifest = {"upstream_revision": UPSTREAM_REV, "device": selected, "python": sys.version,
                 "platform": platform.platform(), "project": str(directory), "warnings": report.warnings,
-                "requested_epochs": epochs, "batch_size": batch,
+                "requested_epochs": epochs, "batch_size": batch, "playback_calibration": calibration,
                 "model_architecture": architecture, "model_name": name, "gear_type": gear_type,
                 "export_format": "SlimmableContainer" if is_dual(architecture) else
                                  ("ParametricWaveNet" if is_film(architecture) else "ConcatWaveNet"),
@@ -132,17 +138,20 @@ def finish_exports(out):
         atomic_write_json(path, model)
 
 
-def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False, architecture=None):
+def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False, architecture=None, input_pad_db=None):
     # Fail unsupported operations visibly, rather than quietly falling back on CPU.
     # Users can explicitly retry the identical captured dataset with --device cpu.
-    out = prepare_run(directory, device, epochs, batch, architecture)
+    out = prepare_run(directory, device, epochs, batch, architecture, input_pad_db)
     print(f"Run folder: {out}", flush=True)
     print(f"Settings: {read_json(out / 'manifest.json')['device']}, {epochs} epochs, batch {batch}", flush=True)
     if dry_run:
         print("Preflight passed; configs saved. No training started.", flush=True)
         return out
     if not is_dual(read_json(out / "manifest.json")["model_architecture"]):
-        return _train_prepared(out)
+        _train_prepared(out)
+        from .playback import qualify_run
+        qualify_run(out)
+        return out
     from nam.capture.project import atomic_write_json
     from .bundle import bundle_a2
     atomic_write_json(out / "status.json", {"status": "running"})
@@ -170,6 +179,8 @@ def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False, a
                     with log.open() as source:
                         for line in source:
                             combined_log.write(line)
+    from .playback import qualify_run
+    qualify_run(out)
     return out
 
 

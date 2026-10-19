@@ -77,7 +77,11 @@ def main(argv=None):
     train.add_argument("--epochs", type=int, default=200)
     train.add_argument("--batch", type=int, default=4)
     train.add_argument("--dry-run", action="store_true")
+    train.add_argument("--input-pad-db", type=float, help="Confirm playback-to-capture input attenuation (0–30 dB); use 12 only for a dataset captured in that digital domain")
     train.add_argument("--architecture", choices=tuple(ARCHITECTURES), help="a2-* uses concat; film-* uses FiLM (continuous controls only); *-dual trains Standard + Nano into one file; auto preserves the recipe")
+    qualify = sub.add_parser("qualify", help="Calibrate and qualify an existing saved run without retraining")
+    qualify.add_argument("run", type=Path)
+    qualify.add_argument("--input-pad-db", type=float, help="Explicit playback input mapping for this saved run")
     args = parser.parse_args(argv)
     try:
         if args.command == "doctor":
@@ -93,7 +97,10 @@ def main(argv=None):
             return 0 if report.ok else 1
         elif args.command == "train":
             from .training import run_training
-            run_training(args.project, args.device, args.epochs, args.batch, args.dry_run, args.architecture)
+            run_training(args.project, args.device, args.epochs, args.batch, args.dry_run, args.architecture, args.input_pad_db)
+        elif args.command == "qualify":
+            from .playback import qualify_run
+            return 0 if qualify_run(args.run, args.input_pad_db)["passed"] else 1
         else:
             from .gui import launch
             return launch(getattr(args, "train_tab", False))

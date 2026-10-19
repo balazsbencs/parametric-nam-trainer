@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, QProcess, QProcessEnvironment, QTimer, QUrl, QRec
 from PySide6.QtGui import QDesktopServices, QPainter, QPen, QColor, QPalette, QFont
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
-    QComboBox, QSpinBox, QPushButton, QPlainTextEdit, QMessageBox, QStackedWidget,
+    QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QPlainTextEdit, QMessageBox, QStackedWidget,
     QScrollArea, QSlider, QCheckBox, QLineEdit, QFileDialog, QTableWidgetItem,
     QProgressBar, QSizePolicy, QBoxLayout, QLayout, QToolButton, QButtonGroup, QStyleOptionSlider, QStyle,
 )
@@ -757,6 +757,20 @@ class MacWindow(MainWindow):
         self.architecture_hint = label("Standard + Nano trains both sizes and saves one model for Ardor. "
                                        "Training runs twice; each size gets the selected number of epochs.", "muted")
         layout.addWidget(self.architecture_hint)
+        self.playback_pad = QDoubleSpinBox()
+        self.playback_pad.setRange(0, 30)
+        self.playback_pad.setSuffix(" dB")
+        self.playback_pad.setAccessibleName("Playback input attenuation")
+        self.playback_confirm = QCheckBox("I confirmed the playback input mapping for these recordings")
+        self.playback_pad.valueChanged.connect(self._save_playback_mapping)
+        self.playback_confirm.toggled.connect(self._save_playback_mapping)
+        mapping = QFormLayout()
+        mapping.addRow("Playback input attenuation", self.playback_pad)
+        layout.addLayout(mapping)
+        layout.addWidget(label("Use 0 dB when playback and capture use the same digital input scale. "
+                               "Use 12 dB for the prepared Bassman teacher dataset. This changes model drive; "
+                               "do not infer it from the recording peak. Protected playback currently supports concat models.", "muted"))
+        layout.addWidget(self.playback_confirm)
         advanced = QWidget()
         form = QFormLayout(advanced)
         self.device = QComboBox()
@@ -818,12 +832,16 @@ class MacWindow(MainWindow):
         self.review_status = label("No saved training runs yet.", "section")
         self.review_metric = label("", "muted")
         self.model_path = label("", "muted")
+        self.qualification_status = label("", "muted")
         layout.addWidget(self.review_status)
         layout.addWidget(self.review_metric)
         layout.addWidget(self.model_path)
+        layout.addWidget(self.qualification_status)
+        self.qualify_button = button("Qualify saved run", lambda: self._start("qualify"))
+        layout.addWidget(self.qualify_button, alignment=Qt.AlignLeft)
         reference.addWidget(label("Listen to the exported model", "section"))
         reference.addWidget(label("Upload this model in Ardor’s manager, then add it from the modules drawer. "
-                               "Ardor supports concat and FiLM exports, including Standard + Nano files. "
+                               "Save model is available after protected playback checks pass. "
                                "NamParametricPlugin supports individual concat exports. "
                                "Use the model’s same knob ranges, and compare against your saved test recordings.", "muted"))
         reference.addWidget(button("Get concat player", lambda: QDesktopServices.openUrl(QUrl("https://github.com/phillipmself/NamParametricPlugin"))), alignment=Qt.AlignLeft)
@@ -879,6 +897,13 @@ class MacWindow(MainWindow):
         if self._ready and not self._applying and self.project_dir and not self._busy():
             self._workflow["model_architecture"] = self.model_architecture.currentData()
             write_state(self.project_dir, self._workflow)
+
+    def _save_playback_mapping(self, *args):
+        if self._ready and not self._applying and self.project_dir and not self._busy():
+            self._workflow["playback_calibration"] = {"confirmed": self.playback_confirm.isChecked(),
+                                                     "input_pad_db": self.playback_pad.value()}
+            write_state(self.project_dir, self._workflow)
+            self._sync_states()
 
     def _plan_locked(self):
         # Sticky once any take was accepted, including if a file goes missing later.
@@ -1102,6 +1127,13 @@ class MacWindow(MainWindow):
         self.session = CaptureSession(project, self.project_dir)
         self._train_input_name, self._validation_input_name = project.train_input, project.validation_input
         self._workflow = read_state(directory)
+        mapping = self._workflow.get("playback_calibration", {})
+        if (not isinstance(mapping, dict) or isinstance(mapping.get("input_pad_db", 0), bool)
+                or not isinstance(mapping.get("input_pad_db", 0), (int, float))
+                or not math.isfinite(mapping.get("input_pad_db", 0)) or not 0 <= mapping.get("input_pad_db", 0) <= 30):
+            mapping = {}
+        self.playback_pad.setValue(mapping.get("input_pad_db", 0))
+        self.playback_confirm.setChecked(mapping.get("confirmed") is True)
         architecture_index = self.model_architecture.findData(self._workflow.get("model_architecture", "auto"))
         self.model_architecture.setCurrentIndex(max(0, architecture_index))
         if project.captured_entries():
@@ -1318,6 +1350,9 @@ class MacWindow(MainWindow):
         self.capture_continue.setEnabled(complete)
         self.check_button.setEnabled(not busy and self.project_dir is not None)
         self.model_architecture.setEnabled(not busy)
+        self.playback_pad.setEnabled(not busy)
+        self.playback_confirm.setEnabled(not busy)
+        self.qualify_button.setEnabled(not busy and bool(self.run_combo.currentData()) and self.playback_confirm.isChecked())
         # Legacy config-only projects may be checked/trained without a capture manifest.
         self.train_button.setEnabled(not busy and (complete or (self.project is None and self.project_dir is not None)))
         self.confirm_knobs.setEnabled(not busy and bool(self.project and self.project.entries))
@@ -1350,16 +1385,24 @@ class MacWindow(MainWindow):
         env.insert("MPLBACKEND", "Agg")
         process.setProcessEnvironment(env)
         process.setWorkingDirectory(str(self.project_dir))
-        args = ["-m", "parametric_mac", command, str(self.project_dir)]
-        args += ["--architecture", self.model_architecture.currentData()]
+        if command == "qualify":
+            if not self.run_combo.currentData() or not self.playback_confirm.isChecked():
+                self.status_label.setText("Confirm input mapping in Train, then select a saved run.")
+                return
+            self._run_folder = Path(self.run_combo.currentData())
+            args = ["-m", "parametric_mac", "qualify", str(self._run_folder), "--input-pad-db", str(self.playback_pad.value())]
+        else:
+            args = ["-m", "parametric_mac", command, str(self.project_dir), "--architecture", self.model_architecture.currentData()]
         if command == "train":
             args += ["--device", self.device.currentData(), "--epochs", str(self.epochs.value()), "--batch", str(self.batch.value())]
+            if self.playback_confirm.isChecked():
+                args += ["--input-pad-db", str(self.playback_pad.value())]
         self.process = process
         process.readyReadStandardOutput.connect(self._read_log)
         process.finished.connect(self._finished)
         process.errorOccurred.connect(self._process_error)
-        self.stop_button.setText("Stop check" if command == "check" else "Stop training")
-        self.status_label.setText("Checking recordings…" if command == "check" else "Checking recordings and preparing training…")
+        self.stop_button.setText("Stop check" if command in ("check", "qualify") else "Stop training")
+        self.status_label.setText("Checking playback model…" if command == "qualify" else "Checking recordings…" if command == "check" else "Checking recordings and preparing training…")
         self.train_log.appendPlainText(f"\n{command.capitalize()}: {self.project_dir}\n")
         self._sync_states()
         process.start(sys.executable, args)
@@ -1392,10 +1435,11 @@ class MacWindow(MainWindow):
         if self.stopping:
             self.status_label.setText("Stopped. Check the run folder for saved checkpoints or an export before continuing.")
         elif code == 0:
-            self.status_label.setText("Recordings passed the checks. You can start training." if self.command == "check" else "Model exported. Open Review to inspect this run and listen.")
+            self.status_label.setText("Recordings passed the checks. You can start training." if self.command == "check" else "Job finished. Open Review for playback qualification and listening.")
             self.train_progress.setValue(100)
         else:
-            self.status_label.setText("Job failed. Your recordings are preserved. Open Training log and errors; for GPU or memory errors, retry on CPU.")
+            self.status_label.setText("Playback checks failed. Open Review for details; recordings and checkpoints are preserved." if self.command == "qualify" else
+                                      "Job failed. Your recordings are preserved. Open Training log and errors; for GPU or memory errors, retry on CPU.")
             self.train_log_toggle.setChecked(True)
             self.retry_button.setVisible(self.command == "train")
         self._reset_process()
@@ -1462,9 +1506,10 @@ class MacWindow(MainWindow):
             return {}
 
     def _exported_run(self):
+        from .review import qualified_model
         data = self.run_combo.currentData()
         run = Path(data) if data else None
-        return run if run and (run / "model_parametric.nam").is_file() else None
+        return run if run and qualified_model(run) is not None else None
 
     def _show_run(self, *args):
         data = self.run_combo.currentData()
@@ -1472,8 +1517,12 @@ class MacWindow(MainWindow):
         exported = self._exported_run()
         state = self._run_json(run, "status.json") if run else {}
         reviewed = self._run_json(run, "review.json").get("listened", False) if run else False
-        self.review_status.setText("Model exported · listening recorded" if exported and reviewed else "Model exported · needs listening" if exported else f"Run: {state.get('status', 'configs saved; no export')}" if run else "No saved training runs yet.")
-        self.model_path.setText(str(run / "model_parametric.nam") if exported else state.get("error", "Capture and train a project to create a model."))
+        self.review_status.setText("Playback qualified · listening recorded" if exported and reviewed else "Playback qualified · needs listening" if exported else f"Run: {state.get('status', 'configs saved; no export')}" if run else "No saved training runs yet.")
+        self.model_path.setText(str(run / "playback/model_playback.nam") if exported else state.get("error", "A qualified playback model is required before saving."))
+        qualification = self._run_json(run / "playback", "qualification.json") if run else {}
+        self.qualification_status.setText("Playback checks passed. Listening and pedal timing still need assessment." if exported else
+            qualification.get("error", "Raw exports remain in the run folder. Confirm input mapping in Train, then qualify this run.") +
+            (" Re-qualify the run if its model file was changed." if qualification.get("passed") else ""))
         metrics = self._run_json(run, "metrics.json") if run else {}
         esr = metrics.get("ESR")
         if isinstance(metrics.get("tiers"), dict):
@@ -1486,6 +1535,9 @@ class MacWindow(MainWindow):
             self.review_metric.setText("\n".join(lines))
         else:
             self.review_metric.setText(f"Last logged validation ESR: {esr:.6g} · epoch {metrics.get('epoch')}\nThis is the last epoch, not a separate evaluation of the exported checkpoint. Lower is better; listen too." if isinstance(esr, (int, float)) else "No validation metric recorded for this run. Inspect training.log for details.")
+        if exported and "mean_validation_esr" in qualification:
+            self.review_metric.setText(f"Playback held-out ESR: mean {qualification['mean_validation_esr']:.6g} · worst {qualification['max_validation_esr']:.6g}\n"
+                                       f"Stress-tested {len(qualification.get('stress', []))} control settings. Listening is still required.")
         self.review_check.blockSignals(True)
         self.review_check.setChecked(bool(reviewed))
         self.review_check.blockSignals(False)
@@ -1512,12 +1564,11 @@ class MacWindow(MainWindow):
         if run:
             dest, _ = QFileDialog.getSaveFileName(self, "Save parametric model", f"{self.project.name if self.project else 'pedal'}-parametric.nam", "NAM model (*.nam)")
             if dest:
-                source = run / "model_parametric.nam"
                 try:
-                    if Path(dest).resolve() != source.resolve():
-                        shutil.copy2(source, dest)
+                    from .review import save_model
+                    save_model(run, dest)
                     self.review_note.setText(f"Model saved to {dest}. Upload it in Ardor’s NAM models manager.")
-                except OSError as exc:
+                except (OSError, ValueError) as exc:
                     self.review_note.setText(f"Could not save model: {exc}")
 
     def _open_outputs(self):
