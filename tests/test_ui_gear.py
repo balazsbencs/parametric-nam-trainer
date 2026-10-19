@@ -146,3 +146,16 @@ def test_fixed_controls_reads_short_notes_only():
     assert fixed_controls("Volume at noon") == (("Volume", "noon"),)
     assert fixed_controls("Tone at 2 o'clock") == (("Tone", "2 o'clock"),)
     assert fixed_controls("Keep unmodeled controls at their recorded positions") == ()
+
+
+def test_gear_form_has_no_large_gaps():
+    run_gui(r"""
+from PySide6.QtWidgets import QApplication
+app = QApplication([])
+from parametric_mac.gui import MacWindow
+window = MacWindow(); window.resize(1140, 900); window.show()
+window._start_new_capture(); app.processEvents()
+top = window.control_editor.mapTo(window, window.control_editor.rect().topLeft()).y() - window.pedal_name.mapTo(window, window.pedal_name.rect().bottomLeft()).y()
+assert top < 80, top
+print("OK")
+""")

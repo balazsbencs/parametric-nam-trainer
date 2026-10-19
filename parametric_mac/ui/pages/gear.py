@@ -81,6 +81,7 @@ class GearPageMixin:
         for widget in (self.gear_lock_note, self.gear_new_link, self.gear_error):
             widget.hide()
             layout.addWidget(widget, 0, Qt.AlignLeft)
+        layout.addStretch(1)  # extra height goes below the form, not between its rows
         return main
 
     def _gear_aside(self) -> QWidget:
