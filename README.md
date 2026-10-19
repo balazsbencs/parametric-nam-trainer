@@ -74,7 +74,7 @@ You can explore the app before connecting hardware. **Recording needs a reamp bo
 2. **Plan.** Leave **Good** selected for a balanced start, or choose **Quick test** to check your setup with fewer recordings. The slider updates all modeled knob steps and sampling counts. Defaults assume a 0–10 dial; if your pedal uses another range, click its range button in **Connect**. Physical ranges and fixed controls remain unchanged when you move the slider. Recording time includes an allowance for turning knobs; training time is separate. Click **Start capturing**.
 3. **Capture.** Turn the real knobs and switches to the displayed positions, confirm they match, then click **Record this setting**. Each accepted take is saved. The next five settings appear in the queue. The full queue and detailed QA are under **Queue and recording details**; select a row to rerecord its exact setting. After the first accepted take, quality and knob labels are locked. Use **Create a separate project** to change the plan or calibrated levels. Reopening a project requires a fresh connection test before recording.
 4. **Train.** Once the plan is recorded, choose a **Model architecture** and click **Check recordings**. The default **NAM A2 · Standard + Nano (one file)** trains both sizes for Ardor. **NAM A2 Nano** uses 3 channels; **NAM A2 Standard** uses 8. **Current recipe** preserves the original automatic width. Try **Quick workflow test · 1 epoch** first, then **Full training · 200 epochs**; combined mode applies that count to each size. Automatic device selection uses the Apple GPU when available, otherwise CPU. Progress and validation metrics come from the real trainer. You can browse other stages while it runs; controls that could change its inputs are disabled. If GPU or memory errors occur, open the log and use **Retry on CPU**, which also reduces batch size to 1.
-5. **Review.** Choose a saved run and inspect its status and last logged validation ESR for each trained size. That metric describes the last epoch, not a fresh evaluation of the exported checkpoint. **Save model…** copies the actual `model_parametric.nam`. In Ardor, upload it under **Assets → NAM models**, then select it in the modules drawer under **Amp and drive**. Individual concat exports can also use [NamParametricPlugin](https://github.com/phillipmself/NamParametricPlugin). FiLM exports target Ardor and Gene Ko's format; they do not use NamParametricPlugin's concat format. The stock NAM player cannot load these architectures. Compare both sizes with the saved `val_lhs_*.wav` test recordings and try unseen knob positions. Listening status is saved per run. This version has no built-in A/B audio player.
+5. **Review.** Inspect playback qualification and held-out ESR for the saved run. **Save model…** copies only the hash-verified `playback/model_playback.nam` after its checks pass. Raw training exports and checkpoints remain internal recovery artifacts. Confirm this project’s input mapping in Train; use **Qualify saved run** to recover an older run without retraining. In Ardor, upload it under **Assets → NAM models**, then select it in the modules drawer under **Amp and drive**. Individual concat exports can also use [NamParametricPlugin](https://github.com/phillipmself/NamParametricPlugin). FiLM raw exports target Ardor and Gene Ko’s format, but protected FiLM saving is currently blocked; choose concat for a qualified playback export. The stock NAM player cannot load these architectures. Compare both sizes with the saved `val_lhs_*.wav` test recordings and try unseen knob positions. Listening status is saved per run. This version has no built-in A/B audio player.
 
 Your project folder contains `capture_project.json`, `workflow.json`, input WAVs, captures and separate `outputs/` run folders. Keep the whole folder when moving or archiving a project. Use one app window per project while recording or training. Training reads existing WAVs and saves hashes; it does not duplicate them into each run. Closing while a job runs requires stopping/cancelling and waiting first. Interrupted or failed run folders are retained; inspect them before assuming a model was exported.
 
@@ -114,7 +114,7 @@ The installer and the doctor's MPS convolution/backprop check have passed on an 
 
 ## A2 profiles and Ardor exports
 
-New projects default to **NAM A2 · Standard + Nano (one file)**. It trains an 8-channel Standard and a 3-channel Nano independently, then writes both into **one `model_parametric.nam`**. Upload that file once in Ardor and choose **Model size → Standard / Nano**. Knobs and switches stay the same when changing size. This is an Ardor-compatible **SlimmableContainer 1.0.0** export with two complete ConcatWaveNet models, rather than a network trained with shared weights.
+New projects default to **NAM A2 · Standard + Nano (one file)**. It trains an 8-channel Standard and a 3-channel Nano independently, then retains a raw combined `model_parametric.nam`. Both tiers must pass playback qualification before Review saves **one `playback/model_playback.nam`**. Upload the qualified file once in Ardor and choose **Model size → Standard / Nano**. Knobs and switches stay the same when changing size. This is an Ardor-compatible **SlimmableContainer 1.0.0** export with two complete ConcatWaveNet models, rather than a network trained with shared weights.
 
 Individual **A2 Standard**, **A2 Nano** and **Current recipe** profiles remain available as **ConcatWaveNet 1.0.0** exports. All profiles use **48 kHz** and named controls. A2 uses the 23-layer kernel/dilation pattern, LeakyReLU activation and 16-sample head with concatenated control conditioning. The [pinned capture recipe](https://github.com/phillipmself/neural-amp-modeler-parametric/blob/a3684411076be69dab53505df14922487697f2cf/nam/capture/export.py) already uses that layer pattern; its automatic width is `8 + 2 × (control count − 1)`. The combined file requires Ardor's parametric container support; individual exports can also use NamParametricPlugin.
 
@@ -132,7 +132,7 @@ The local PyTorch network exports **ParametricWaveNet 0.7.0, FiLM schema 1, skip
 
 The combined file is a **SlimmableContainer 0.7.0** with 3-channel Nano and 8-channel Standard children. To follow the existing FiLM player's parent-level loudness convention, packaging copies and normalizes each child's output head to −18 dB. This matches each standalone export's normalized playback. Original individual files and checkpoints remain under `tiers/`, with their original calibration. Ardor supports the individual and combined exports; verification here uses Ardor's actual C++ runtime. Gene Ko's public player uses the same format, but has not been separately exercised here.
 
-After training, save the model from Review and upload it to Ardor once. Check both sizes on unseen audio and settings; switching sizes retains the controls. FiLM accuracy, CPU cost and training time must be compared with concat on the same real captures. Full MPS training and Raspberry Pi performance remain unverified.
+FiLM training and its raw format remain available for research, but Review blocks FiLM saving until its protected conversion is implemented. Use concat to obtain a qualified playback file. For raw-format research, check both sizes on unseen audio and settings; switching sizes retains the controls. FiLM accuracy, CPU cost and training time must be compared with concat on the same real captures. Full MPS training and Raspberry Pi performance remain unverified.
 
 ## Terminal controls
 
@@ -181,3 +181,49 @@ git -C .upstream checkout a3684411076be69dab53505df14922487697f2cf
 ```
 
 Editable installation is deliberate: the inspected upstream wheel package list omits its capture package. The trainer is pinned; transitive dependencies are not fully locked. Revalidate before updating either. Synthetic tests prove integration, not pedal accuracy.
+
+## Protected playback exports
+
+In **Train**, set **Playback input attenuation** and confirm the mapping for your
+recordings. This is the attenuation from a player's digital input to the input
+scale used by the training dataset. Use **0 dB** for the same digital scale; use
+**12 dB only for the prepared Bassman teacher dataset**. It is not inferred from
+recording peaks or from the selected amp name. The setting is stored per project
+and snapshotted per run. An unconfirmed mapping retains training outputs but
+blocks playback export.
+
+After training, supported single-array concat models receive a baked-in input pad
+and a standard NAM Hardtanh output head. The head is identity within +/-0.8 and
+bounds larger output. Loudness is measured from that playback model. A normalization
+floor prevents Ardor from amplifying the bounded head above -1 dBFS. The input pad
+changes drive: matching the original captures requires the corresponding inverse
+input boost. This does not establish accurate amp tone outside the recorded range.
+
+Qualification checks the exported weights against the run's held-out recordings,
+using the pinned loader's window, alignment and input-gain rules. Mean ESR must be
+<=0.10 and every capture <=0.25. It also checks finite/bounded output with silence,
+tones, steps, impulses, noise and overload. The control grid comes from the
+project's own controls: small declared grids are exhaustive, while large or
+continuous spaces use a deterministic sample plus held-out settings. The report
+records which coverage was used. Standard + Nano qualifies both tiers separately;
+both must pass before the protected combined model is published.
+
+**Review → Save model…** copies only `playback/model_playback.nam` with a passing,
+hash-matching `playback/qualification.json`. Raw exports and checkpoints remain in
+the run folder for recovery. Changing a qualified model invalidates saving. Failed
+qualification retains recordings/checkpoints and shows its reason in Review.
+Listening and target hardware real-time performance remain separate assessments.
+
+To recover an existing saved run without retraining, confirm its mapping in Train,
+select it in Review, and choose **Qualify saved run**. CLI equivalents:
+
+```sh
+.venv/bin/parametric train /path/to/project --architecture a2-standard --input-pad-db 12
+.venv/bin/parametric qualify /path/to/project/outputs/RUN_FOLDER --input-pad-db 12
+```
+
+The protected conversion currently supports single-array concat networks without
+an existing post-stack head, FiLM routes, grouped input mixers, or analog input-level
+metadata. **FiLM training remains available, but protected FiLM export is blocked**
+until its protection path is implemented. Select concat for a protected export.
+Do not distribute raw exports to bypass this gate.
