@@ -11,3 +11,4 @@ dist/
 .impeccable/config.local.json
 
 .superpowers/
+.coverage*

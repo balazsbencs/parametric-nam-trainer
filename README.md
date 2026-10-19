@@ -1,12 +1,10 @@
 # Parametric capture for Mac
 
-Capture pedals or amps at multiple knob and switch settings and train one controllable NAM model locally on an Apple Silicon Mac. The native app guides you through **Connect → Plan → Capture → Train → Review**, using the public [parametric NAM trainer](https://github.com/phillipmself/neural-amp-modeler-parametric) at a pinned revision.
+Capture pedals or amps at many knob and switch settings, and train one controllable NAM model on your Apple Silicon Mac. The app opens on **Start** and then walks you through five steps: **Gear → Connect → Record → Train → Listen**. Each step has one job and one main button. Technical settings stay under **Expert settings** on each page.
 
-Plan has one capture-quality slider, with **Good** recommended. The app sets recording counts and knob steps automatically, shows the actual recording effort, and keeps technical settings under Advanced. Quality means capture coverage, not guaranteed sound quality.
+The app works with any sound card. It has a dark and a light theme: by default it follows the macOS setting, and **View → Appearance** (or the ◐ button in the top bar) lets you choose **Match macOS**, **Light** or **Dark**. Fonts (Geist and Geist Mono) and icons are bundled and load locally.
 
-The desktop interface now uses the approved mockups’ bundled Inter typography, flat controls, vector routing icons, circular quality slider and physical dial diagrams. Training duration is selected with **Full training / Quick test / Custom** segments; model architecture remains a separate choice. Fonts and icons are included with the application and load locally.
-
-![Native Plan screen, rendered on Linux](docs/screenshots/native/plan-desktop.png)
+![The recording step in the dark theme](docs/screenshots/native/record-loop-dark-desktop.png)
 
 ## Install on an Apple Silicon Mac
 
@@ -36,7 +34,7 @@ The trainer runtime supports Python 3.11–3.13. Python 3.15 cannot run the trai
    ./Capture.command
    ```
 
-   You can also double-click **Capture.command** in Finder after installation. **Train.command** opens the same app on Train; open your project using the header button.
+   You can also double-click **Capture.command** in Finder after installation. **Train.command** opens the same app; pick your project on **Start**.
 
 To use your own native Python 3.11–3.13 with Tk instead of uv-managed Python, specify its path when creating the environment:
 
@@ -66,29 +64,33 @@ git pull
 
 Your capture projects live in the folders you selected and are kept separate from the application source. This update retains older continuous-knob projects; new switch projects should be opened with this companion app so their named positions are preserved.
 
-## Your first pedal capture with a UMC22
+## Your first capture
 
 You can explore the app before connecting hardware. **Recording needs a reamp box**, cables, your pedal and its correct power supply. Start with an overdrive, distortion or EQ pedal. Add named switch positions if you want the model to reproduce them; leave unmodeled switches fixed. Delay and modulation pedals are outside this initial capture protocol.
 
-1. **Connect.** Name your gear and edit its controls directly: **Add knob**, **Add switch**, or **Remove**. Rename each row and click its range / position button to edit it. **Pedal starter** creates Drive + Tone; **Amp starter** creates six knobs + Bright. All starter controls are editable. Note the controls you will keep fixed, such as Level at 5. Click **New project** and choose an empty folder. The app copies the two verified excitation files automatically. Wire **OUTPUT L → reamp box → pedal input**, then **pedal output → MIC/LINE 1 using its ¼-inch jack**. Turn Direct Monitor and DAW monitoring off, disconnect speakers from capture outputs, and set the UMC22 to **48 kHz** in Audio MIDI Setup. Start levels low, check the loudest pedal setting for headroom, then keep interface and reamp levels fixed. Select the UMC22 and confirm the setup checkboxes before **Test connection**. Follow the detailed [hardware guide](docs/hardware-umc22.md), including the optional clean timing loopback.
-2. **Plan.** Leave **Good** selected for a balanced start, or choose **Quick test** to check your setup with fewer recordings. The slider updates all modeled knob steps and sampling counts. Defaults assume a 0–10 dial; if your pedal uses another range, click its range button in **Connect**. Physical ranges and fixed controls remain unchanged when you move the slider. Recording time includes an allowance for turning knobs; training time is separate. Click **Start capturing**.
-3. **Capture.** Turn the real knobs and switches to the displayed positions, confirm they match, then click **Record this setting**. Each accepted take is saved. The next five settings appear in the queue. The full queue and detailed QA are under **Queue and recording details**; select a row to rerecord its exact setting. After the first accepted take, quality and knob labels are locked. Use **Create a separate project** to change the plan or calibrated levels. Reopening a project requires a fresh connection test before recording.
-4. **Train.** Once the plan is recorded, choose a **Model architecture** and click **Check recordings**. The default **NAM A2 · Standard + Nano (one file)** trains both sizes for Ardor. **NAM A2 Nano** uses 3 channels; **NAM A2 Standard** uses 8. **Current recipe** preserves the original automatic width. Try **Quick workflow test · 1 epoch** first, then **Full training · 200 epochs**; combined mode applies that count to each size. Automatic device selection uses the Apple GPU when available, otherwise CPU. Progress and validation metrics come from the real trainer. You can browse other stages while it runs; controls that could change its inputs are disabled. If GPU or memory errors occur, open the log and use **Retry on CPU**, which also reduces batch size to 1.
-5. **Review.** Inspect playback qualification and held-out ESR for the saved run. **Save model…** copies only the hash-verified `playback/model_playback.nam` after its checks pass. Raw training exports and checkpoints remain internal recovery artifacts. Confirm this project’s input mapping in Train; use **Qualify saved run** to recover an older run without retraining. In Ardor, upload it under **Assets → NAM models**, then select it in the modules drawer under **Amp and drive**. Individual concat exports can also use [NamParametricPlugin](https://github.com/phillipmself/NamParametricPlugin). FiLM raw exports target Ardor and Gene Ko’s format, but protected FiLM saving is currently blocked; choose concat for a qualified playback export. The stock NAM player cannot load these architectures. Compare both sizes with the saved `val_lhs_*.wav` test recordings and try unseen knob positions. Listening status is saved per run. This version has no built-in A/B audio player.
+1. **Start.** Click **New capture**, or continue a project from the list. The list shows the saved state of each project, for example "Recording · 18 of 40 takes" or "Model ready".
+2. **Gear.** Type a name and choose **Pedal** or **Amp**. The knobs and switches you want to turn later are tiles: click **+ Knob** or **+ Switch** to add one, × to remove one, and a name or range to change it. Pedal starts with Drive + Tone; Amp starts with six knobs + Bright. Write down the controls you keep fixed, such as "Level at 5". The drawing and the estimate ("~40 recordings · ~29 min") follow your changes. **Next: Connect** creates the project in `~/Music/Parametric/<name>`; click **Change** to choose another empty folder.
+3. **Connect.** Three small stages, top to bottom:
+   - **Wire it up:** sound card output → reamp box → pedal → sound card input (an amp goes through a load box; never connect a speaker output to the sound card). Turn monitoring off, unplug speakers from the sound card, and tick the checkbox.
+   - **Choose the sound card and channels:** pick your sound card. The output channel is where the cable to the reamp box starts; the input channel is where the cable from your gear comes back. If the sound card does not run at 48 kHz, the app says so and shows an **Open Audio MIDI Setup** button.
+   - **Check the loudest level:** turn every knob on your gear to its loudest setting and click **Check level**. When the peak is good, do not touch the sound card gain again for this project.
 
-Your project folder contains `capture_project.json`, `workflow.json`, input WAVs, captures and separate `outputs/` run folders. Keep the whole folder when moving or archiving a project. Use one app window per project while recording or training. Training reads existing WAVs and saves hashes; it does not duplicate them into each run. Closing while a job runs requires stopping/cancelling and waiting first. Interrupted or failed run folders are retained; inspect them before assuming a model was exported.
+   **Show me how to fix it** lists the common problems. The [UMC22 guide](docs/hardware-umc22.md) and the [amp guide](docs/hardware-amps.md) are two example setups, including the optional timing loopback (under **Expert settings**).
+4. **Record.** Choose how detailed the capture is: **Fast** (to test your setup), **Good** (recommended) or **Max**. Each card shows the real number of takes and the time. Then set the knobs to the shown positions and click **Record** (or press Space). Controls that changed since the last take are marked "changed". After each take the app checks it: a clipped take must be recorded again, and if it clips again, start a new capture with a lower level. **All takes** lists every take, and you can record any of them again. You can change the detail level until the first take; after that, the plan is locked. A reopened project always asks you to check the level on Connect again.
+5. **Train.** Choose **Quick test** (1 round, to check the workflow) or **Full training** (200 rounds per size). **Start training** first checks your recordings, then trains. While it runs you see the progress, the time left and a chart of the difference from the real pedal on the test settings. If the Mac runs out of graphics memory, click **Try again on CPU**. The model type (default **NAM A2 · Standard + Nano**, one file for Ardor), epochs, device and batch size are under **Expert settings**.
+6. **Listen.** Confirm the playback input mapping under Train → Expert settings, then use **Qualify saved run** if needed. **Save model…** copies only the hash-verified `playback/model_playback.nam` after playback checks pass. Raw exports remain in the run folder. Load it in Ardor (upload it under **Assets → NAM models**, then add it from the modules drawer under **Amp and drive**); single concat models also open in [NamParametricPlugin](https://github.com/phillipmself/NamParametricPlugin). The stock NAM player cannot load these models. Listen at the test settings, which were not used to train the model, and tick the two checks. **Expert settings** shows the last logged validation ESR. That number describes the last training round, not a fresh evaluation of the saved model, and the test settings also chose the best round, so listen too. **Earlier models** lists older runs. This version has no built-in A/B player.
 
 ## More knobs, switches and amps
 
-Connect supports **up to 24 total controls**, with at least one continuous knob. A switch can have two or more named positions, such as Off / On or Clean / Crunch / Lead. Click its position button and enter one label per line. Capture shows those labels, and saved projects, training configs and exported models retain the switch metadata.
+Gear supports **up to 24 total controls**, with at least one continuous knob. A switch can have two or more named positions, such as Off / On or Clean / Crunch / Lead. Click its position text on the tile and enter one label per line. Record shows those labels, and saved projects, training configs and exported models retain the switch metadata.
 
-The quality slider adjusts the precision of every knob and allocates training and unseen test recordings to **every switch combination**. Two binary switches multiply the session by four; a three-position switch plus a binary switch multiplies it by six. The app limits a project to 32 combinations and 5,000 actual recordings and explains how to reduce an oversized plan. Keep some switches fixed or use separate projects when the effort is too high. A high-dimensional model still needs listening checks: a large knob count does not guarantee enough coverage.
+The detail level (Fast, Good, Max, plus Decent and Overkill under Expert settings) adjusts the precision of every knob and allocates training and unseen test recordings to **every switch combination**. Two binary switches multiply the session by four; a three-position switch plus a binary switch multiplies it by six. The app limits a project to 32 combinations and 5,000 actual recordings and explains how to reduce an oversized plan. Keep some switches fixed or use separate projects when the effort is too high. A high-dimensional model still needs listening checks: a large knob count does not guarantee enough coverage.
 
 With more than eight knobs, boundary captures sweep each knob at its extremes with the others near the middle, plus all-low and all-high settings. This avoids an exponential corner set. Smaller layouts keep the original gain-aware corner sampling. Test settings remain disjoint from training and boundaries.
 
-For amp controls, choose **Amp starter** or select **Amp** and build your own layout. Start with a smaller subset and leave channel, master or presence fixed if that makes the first session manageable. This is the same capture/training engine, with an amp-specific route reminder. Actual amp hardware capture and sound quality still need verification on your equipment.
+For amp controls, select **Amp** on Gear and build your own layout from the starter. Start with a smaller subset and leave channel, master or presence fixed if that makes the first session manageable. This is the same capture/training engine, with an amp-specific route reminder. Actual amp hardware capture and sound quality still need verification on your equipment.
 
-**An amp's speaker output must never connect directly to the UMC22.** A power-amp capture needs a suitable load box and its DI / line return, with impedance and power ratings appropriate to the amp. Read the [amp hardware guide](docs/hardware-amps.md) before powering up. A pedal capture needs no speaker load box.
+**An amp's speaker output must never connect directly to the sound card.** A power-amp capture needs a suitable load box and its DI / line return, with impedance and power ratings appropriate to the amp. Read the [amp hardware guide](docs/hardware-amps.md) before powering up. A pedal capture needs no speaker load box.
 
 ## Troubleshooting on Mac
 
@@ -97,11 +99,11 @@ For amp controls, choose **Amp starter** or select **Amp** and build your own la
 | Python version, architecture or Tk error | Run `Install.command` with `PARAMETRIC_PYTHON` unset to use uv-managed Python 3.12 with Tk. Rename any incompatible `.venv` first. Confirm Terminal is running without Rosetta. System Python 3.15 is fine; the trainer uses its own runtime. |
 | uv or Python download fails | Check your internet connection and rerun. You can also install uv with `brew install uv` or [Astral's installer](https://docs.astral.sh/uv/getting-started/installation/). |
 | Finder will not open a `.command` file | Launch it from Terminal using `./Capture.command`. For a downloaded file blocked by macOS, use the normal Finder/Open or Privacy & Security flow if you trust the source. |
-| No interface or no input | Connect the UMC22, refresh interfaces and select it in Connect. Allow microphone access for the launching app, usually Terminal or Python, in System Settings → Privacy & Security → Microphone. |
-| Sample-rate warning | Set the UMC22 to 48 kHz in Audio MIDI Setup, then refresh interfaces and test again. |
+| No interface or no input | Connect your sound card, press refresh (↻) on Connect and select it. Allow microphone access for the launching app, usually Terminal or Python, in System Settings → Privacy & Security → Microphone. |
+| Sample-rate warning | Click **Open Audio MIDI Setup** on Connect, set your sound card to 48 kHz, then check the level again. |
 | Loopback not detected | Check the optional cable and channels, or disable the optional loopback if you have not wired it. It is off by default. |
-| Silence, clipping or timing QA warnings | Read recording details and the hardware guide. Correct the route; if gain calibration changes, begin a separate project rather than mixing levels. |
-| GPU or memory failure | Use Retry on CPU, or reduce Batch size under Advanced training settings. The original recordings are retained. |
+| Silence, clipping or timing warnings | Read the message on Record and the hardware guide. Correct the route; if the level must change, use **Start a new capture with these controls** rather than mixing levels. |
+| GPU or memory failure | Click **Try again on CPU**, or reduce Batch size under Train → Expert settings. The original recordings are retained. |
 | Existing `.venv` or `.upstream` rejected by installer | Rename the conflicting directory and rerun. The installer preserves incompatible environments and trainer checkouts with edits or a different revision. |
 
 To inspect dependencies and the Apple GPU:
@@ -132,7 +134,7 @@ The local PyTorch network exports **ParametricWaveNet 0.7.0, FiLM schema 1, skip
 
 The combined file is a **SlimmableContainer 0.7.0** with 3-channel Nano and 8-channel Standard children. To follow the existing FiLM player's parent-level loudness convention, packaging copies and normalizes each child's output head to −18 dB. This matches each standalone export's normalized playback. Original individual files and checkpoints remain under `tiers/`, with their original calibration. Ardor supports the individual and combined exports; verification here uses Ardor's actual C++ runtime. Gene Ko's public player uses the same format, but has not been separately exercised here.
 
-FiLM training and its raw format remain available for research, but Review blocks FiLM saving until its protected conversion is implemented. Use concat to obtain a qualified playback file. For raw-format research, check both sizes on unseen audio and settings; switching sizes retains the controls. FiLM accuracy, CPU cost and training time must be compared with concat on the same real captures. Full MPS training and Raspberry Pi performance remain unverified.
+FiLM training and its raw format remain available for research, but Listen blocks FiLM saving until its protected conversion is implemented. Use concat to obtain a qualified playback file. For raw-format research, check both sizes on unseen audio and settings; switching sizes retains the controls. FiLM accuracy, CPU cost and training time must be compared with concat on the same real captures. Full MPS training and Raspberry Pi performance remain unverified.
 
 ## Terminal controls
 
@@ -163,9 +165,10 @@ Preflight checks missing/mono/mismatched audio, digital full-scale peaks, silenc
 - [Amp wiring, load boxes and control selection](docs/hardware-amps.md)
 - [Verification and remaining Mac hardware checks](docs/validation.md)
 - [Original UI audit](docs/ui-audit/report.md)
-- [Approved workflow mockups](docs/mockups/overview.html) · [clickable prototype](docs/mockups/index.html)
+- [Console redesign: spec](docs/superpowers/specs/2026-10-17-ux-redesign-design.md) · [approved mockups](docs/design/2026-10-17-ux-redesign/) · [screenshots](docs/screenshots/native/)
+- [First design mockups (superseded)](docs/mockups/overview.html) · [clickable prototype](docs/mockups/index.html)
 
-The mockups use example data; the five-stage workflow is now implemented in the native Qt app. This is a source-based app, not a signed standalone Mac installer or a new plugin runtime. The original ParametricOD article does not publish its complete recipe; this tool uses the public fork's capture and training machinery.
+The mockups use example data; the Console flow (Start, Gear, Connect, Record, Train, Listen) is implemented in the native Qt app. This is a source-based app, not a signed standalone Mac installer or a new plugin runtime. The original ParametricOD article does not publish its complete recipe; this tool uses the public fork's capture and training machinery.
 
 ## Development
 
