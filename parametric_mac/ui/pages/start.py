@@ -151,8 +151,7 @@ class StartPageMixin:
         if self._busy():
             self.footer.set_status("Stop the running job before you open another project.")
             return
-        try:
-            self._open_project(path)
-        except (OSError, ValueError) as exc:
-            self.footer.set_status(f"Could not open {path.name}: {exc}")
+        message = self._try_open(path)
+        if message:
+            self.footer.show_message(message)
             self._refresh_recent()

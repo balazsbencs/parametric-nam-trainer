@@ -1,6 +1,7 @@
 """Create, open and persist capture projects; route readiness."""
 from pathlib import Path
 import hashlib
+import logging
 import shutil
 from PySide6.QtWidgets import (
     QMessageBox, QFileDialog,
@@ -24,15 +25,8 @@ class ProjectMixin:
         self.project_dir = None
         self.session = None
         self._workflow = {}
-        self._route_fingerprint = None
         self._preview = None
-        self.capture_log.clear()
-        self.train_log.clear()
-        self.train_progress.setValue(0)
-        self.retry_button.hide()
-        self.train_alert.hide()
-        self._reset_connect()
-        self._reset_record_loop()
+        self._project_switched()
         # A new capture never inherits the old project's level or runs.
         self._quality = RECOMMENDED_LEVEL
         self._apply_quality(RECOMMENDED_LEVEL)
@@ -57,17 +51,9 @@ class ProjectMixin:
         self._workflow = {"quality": self._quality, "fixed_notes": self.fixed_notes.text(), "plan_locked": False,
                           "gear_kind": "amp" if self.gear_kind.currentIndex() else "pedal",
                           "model_architecture": self.model_architecture.currentData()}
-        self._route_fingerprint = None
-        self._reset_connect()
-        self._reset_record_loop()
-        self.capture_log.clear()
-        self.train_log.clear()
-        self.train_progress.setValue(0)
-        self.retry_button.hide()
-        self.train_alert.hide()
+        self._project_switched()
         save_project(self.project, directory)
         write_state(directory, self._workflow)
-        self.status_label.setText("")
         self._remember_project()
         self._refresh_runs()
         self.go_to_step("connect")
@@ -79,47 +65,83 @@ class ProjectMixin:
             return
         directory = QFileDialog.getExistingDirectory(self, "Open pedal project")
         if directory:
+            message = self._try_open(Path(directory))
+            if message:
+                QMessageBox.warning(self, "Could not open project", message)
+
+    def _try_open(self, directory: Path) -> str | None:
+        """Open a project; on any failure return a one-line message (the full error goes to the log)."""
+        try:
+            self._open_project(directory)
+        except Exception as exc:  # noqa: BLE001 - every failure must reach the user as a message
+            logging.getLogger(__name__).exception("Could not open %s", directory)
+            first_line = str(exc).splitlines()[0] if str(exc) else type(exc).__name__
+            return f"Could not open {directory.name}: {first_line}"
+        return None
+
+    def _read_project(self, directory) -> dict:
+        """Load and validate everything a project needs before the window changes. Raises on a bad project."""
+        project = load_project(directory)
+        workflow = read_state(directory)
+        quality = workflow.get("quality")
+        notes = workflow.get("fixed_notes", "Keep unmodeled controls at their recorded positions")
+        controls = project.knob_specs() or starter()
+        drafts = workflow.get("draft_controls")
+        locked = bool(project.captured_entries() or workflow.get("plan_locked"))
+        draft_error = None
+        if not locked and isinstance(drafts, list) and drafts:
             try:
-                self._open_project(Path(directory))
-            except (OSError, ValueError) as exc:
-                QMessageBox.warning(self, "Could not open project", str(exc))
+                controls = tuple(ControlModel.model_validate(c).to_knob_spec() for c in drafts)
+            except ValueError as exc:  # unsaved edits only: fall back to the saved controls
+                draft_error = f"The draft controls could not be read, so the saved controls are used: {exc}"
+        return {"project": project, "workflow": workflow, "controls": controls, "draft_error": draft_error,
+                "quality": quality if type(quality) is int and 0 <= quality <= 4 else None,
+                "notes": notes if isinstance(notes, str) else "",
+                "amp": workflow.get("gear_kind") == "amp"}
 
     def _open_project(self, directory):
-        project = load_project(directory)
+        opened = self._read_project(directory)  # raises before anything changes
+        try:
+            self._apply_opened(opened, Path(directory))
+        except Exception:
+            # The window already changed: end in a known state with no project, never half-open.
+            self._applying = False
+            self._reset_project_state()
+            raise
+
+    def _apply_opened(self, opened: dict, directory: Path) -> None:
+        project = opened["project"]
         self._applying = True
-        self.project, self.project_dir = project, Path(directory)
-        self.session = CaptureSession(project, self.project_dir)
-        self._train_input_name, self._validation_input_name = project.train_input, project.validation_input
-        self._workflow = read_state(directory)
-        architecture_index = self.model_architecture.findData(self._workflow.get("model_architecture", "auto"))
-        self.model_architecture.setCurrentIndex(max(0, architecture_index))
-        if project.captured_entries():
-            self._workflow["plan_locked"] = True
-            write_state(directory, self._workflow)
-        stored_quality = self._workflow.get("quality")
-        self._quality = stored_quality if type(stored_quality) is int and 0 <= stored_quality <= 4 else None
-        self.pedal_name.setText(project.name)
-        self.fixed_notes.setText(self._workflow.get("fixed_notes", "Keep unmodeled controls at their recorded positions"))
-        controls = project.knob_specs() or starter()
-        if not self._plan_locked() and self._workflow.get('draft_controls'):
-            controls = tuple(ControlModel.model_validate(c).to_knob_spec() for c in self._workflow['draft_controls'])
-        self.control_editor.set_controls(controls)
-        self._mirror_controls()
-        self.gear_kind.setCurrentIndex(1 if self._workflow.get("gear_kind") == "amp" else 0)
-        self._gear_changed()
-        self.knob_names.setText(", ".join(row[0] for row in self._knob_table_rows()))
-        self._sync_card_selection()
-        self._applying = False
-        self._route_fingerprint = None
-        self.capture_log.clear()
-        self.train_log.clear()
-        self.train_progress.setValue(0)
-        self.train_metric.setText("")
-        self.retry_button.hide()
-        self.train_alert.hide()
-        self.status_label.setText("")
-        self._reset_connect()
-        self._reset_record_loop()
+        try:
+            self.project, self.project_dir = project, directory
+            self.session = CaptureSession(project, directory)
+            self._train_input_name, self._validation_input_name = project.train_input, project.validation_input
+            self._workflow = opened["workflow"]
+            self._project_switched()
+            architecture_index = self.model_architecture.findData(self._workflow.get("model_architecture", "auto"))
+            self.model_architecture.setCurrentIndex(max(0, architecture_index))
+            if project.captured_entries() and not self._workflow.get("plan_locked"):
+                self._workflow["plan_locked"] = True
+                try:
+                    write_state(directory, self._workflow)
+                except OSError as exc:  # the lock still holds in memory: it is derived from the takes
+                    self.capture_log.appendPlainText(f"Could not save workflow.json: {exc}")
+            self._quality = opened["quality"]
+            self.pedal_name.setText(project.name)
+            self.fixed_notes.setText(opened["notes"])
+            self.control_editor.set_controls(opened["controls"])
+            self._mirror_controls()
+            self.gear_kind.setCurrentIndex(1 if opened["amp"] else 0)
+            self._gear_changed()
+            self.knob_names.setText(", ".join(row[0] for row in self._knob_table_rows()))
+            self._sync_card_selection()
+            if opened["draft_error"]:
+                self.capture_log.appendPlainText(opened["draft_error"])
+        finally:
+            self._applying = False
+        self._finish_open(project)
+
+    def _finish_open(self, project) -> None:
         notes = self._recover_and_reconcile()
         if notes:
             self.capture_feedback.setText("\n".join(notes))
@@ -130,10 +152,28 @@ class ProjectMixin:
         self._refresh_all()
         self._refresh_preview()
         self._refresh_runs()
-        self._gear_folder = None
         self._remember_project()
         self._refresh_gear()
         self.go_to_step(resume_step(project_status(self.project_dir)))
+
+    def _project_switched(self) -> None:
+        """Clear every piece of page state that belongs to one project. Used by new, create and open."""
+        self._route_fingerprint = None
+        self._record_choosing = False
+        self._gear_folder = None
+        self.capture_log.clear()
+        self.train_log.clear()
+        self.train_progress.setValue(0)
+        self.train_metric.setText("")
+        self.retry_button.hide()
+        self.train_alert.hide()
+        self.status_label.setText("")
+        self._reset_connect()
+        self._reset_record_loop()
+        self.footer.clear_message()
+        # "Try again on CPU" settings belong to one run; they must not slow down the next project.
+        self.device.setCurrentIndex(max(0, self.device.findData("auto")))
+        self.batch.setValue(4)
 
     def _route_ready(self):
         return self._connect_ready()

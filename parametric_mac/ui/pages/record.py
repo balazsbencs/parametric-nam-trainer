@@ -242,6 +242,7 @@ class RecordPageMixin:
         if self._busy() or self.project_dir is None:
             return
         if self._plan_locked():
+            self._record_choosing = False
             self._show_record_state()
             self.go_to_step("record")
             return

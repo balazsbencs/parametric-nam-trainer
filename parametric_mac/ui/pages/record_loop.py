@@ -3,8 +3,7 @@ import math
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QHBoxLayout, QLineEdit, QPlainTextEdit,
-                               QProgressBar, QPushButton, QSizePolicy, QTextEdit, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QHBoxLayout, QProgressBar, QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
 from ...controls import format_controls
 from ...theme import mono_font
@@ -13,7 +12,6 @@ from ..copy import take_message
 from ..widgets.common import PAGE_MARGIN, AlertBox, PageScroll, button, disclosure, label, set_style_property, themed
 from ..widgets.knobs import TargetControls, changed_controls
 
-TEXT_INPUTS = (QLineEdit, QPlainTextEdit, QTextEdit, QAbstractSpinBox)
 SECONDS_TO_SET = 10  # the same allowance as workflow.recording_minutes
 
 
@@ -159,7 +157,11 @@ class RecordLoopMixin:
     def _space_pressed(self) -> None:
         if self.current_step() != "record" or self.record_stack.currentWidget() is not self.record_loop:
             return
-        if isinstance(QApplication.focusWidget(), TEXT_INPUTS) or not self.record_button.isEnabled():
+        focus = QApplication.focusWidget()
+        # Space belongs to a focused control (a table row, a button); only the bare loop page records.
+        if focus not in (None, self.record_loop, self.record_loop.viewport(), self.record_loop.widget()):
+            return
+        if not self.record_button.isEnabled():
             return
         if self._worker is not None:  # A quick double press must not cancel the take; Cancel stays on the button.
             return
@@ -208,6 +210,12 @@ class RecordLoopMixin:
         self._retry_entry = recorded
         self._show_target(recorded)
         self._sync_states()
+        self._focus_loop()
+
+    def _focus_loop(self) -> None:
+        """Space records only from the loop page itself, so give focus back after a button hides."""
+        if self.record_stack.currentWidget() is self.record_loop:
+            self.record_loop.setFocus(Qt.OtherFocusReason)
 
     def _keep_take(self) -> None:
         """A warning is advisory: the user may keep the saved take and move on. Clipped takes cannot."""
@@ -215,6 +223,7 @@ class RecordLoopMixin:
         self.take_alert.hide()
         self._show_next_target()
         self._sync_states()
+        self._focus_loop()
 
     def _on_capture_failure(self, message):
         self.capture_progress.hide()
@@ -232,8 +241,10 @@ class RecordLoopMixin:
     def _show_selected_target(self):
         row = self.capture_table.currentRow()
         if 0 <= row < len(self._displayed_entries):
-            self._show_target(self._displayed_entries[row])
-            self.capture_feedback.setText("This is a saved take. Use Record this one again to replace it.")
+            entry = self._displayed_entries[row]
+            self._show_target(entry)
+            self.capture_feedback.setText("This take is saved. Record again replaces it." if entry.status == "captured"
+                                          else "Selected setting. Press Record to record it.")
         self._sync_states()
 
     # ---- display --------------------------------------------------------------------
@@ -246,6 +257,7 @@ class RecordLoopMixin:
         self._last_params = None
         self.take_alert.hide()
         self.last_take_label.setText("No take yet")
+        self.capture_feedback.setText("Every take is saved at once. You can close the app and continue later.")
 
     def _show_target(self, entry) -> None:
         self._shown_entry = entry
@@ -303,7 +315,8 @@ class RecordLoopMixin:
         if not hasattr(self, "record_button"):
             return
         recording = self._worker is not None
-        self.record_button.setText("Cancel" if recording else "Record again" if self._retry_entry else "Record")
+        saved = self._shown_entry is not None and self._shown_entry.status == "captured"
+        self.record_button.setText("Cancel" if recording else "Record again" if self._retry_entry or saved else "Record")
         target = self._retry_entry or self._shown_entry
         self.record_button.setEnabled(self._cancel_token is not None if recording else can_record and target is not None)
         self.capture_selected_button.setEnabled(can_record and self.capture_table.currentRow() >= 0)

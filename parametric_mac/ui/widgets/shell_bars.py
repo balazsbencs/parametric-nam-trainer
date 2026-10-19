@@ -1,4 +1,5 @@
 """Top bar with the step bar, and the footer with one action slot per step."""
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
@@ -10,6 +11,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QSt
 from .common import Themed, label
 
 StepState = Literal["todo", "current", "done"]
+MESSAGE_SECONDS = 12.0
 
 
 @dataclass(frozen=True)
@@ -181,6 +183,7 @@ class Footer(QWidget):
         row = QHBoxLayout(self)
         row.setContentsMargins(24, 10, 24, 10)
         self.status = label("", "muted")
+        self._message_until = 0.0
         row.addWidget(self.status, 1)
         self._actions = QStackedWidget()
         self._actions.setObjectName("footerActions")
@@ -200,4 +203,15 @@ class Footer(QWidget):
         self._actions.setCurrentIndex(self._slots.get(key, 0))
 
     def set_status(self, text: str) -> None:
+        """The current state. A recent message (show_message) wins until it expires."""
+        if time.monotonic() < self._message_until:
+            return
+        self.status.setText(text)
+
+    def clear_message(self) -> None:
+        self._message_until = 0.0
+
+    def show_message(self, text: str, seconds: float = MESSAGE_SECONDS) -> None:
+        """A message the periodic state refresh does not overwrite, for example an error."""
+        self._message_until = time.monotonic() + seconds
         self.status.setText(text)
