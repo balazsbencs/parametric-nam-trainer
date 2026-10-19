@@ -24,6 +24,7 @@ LOAD_STEPS = ("In Ardor, upload the file under Assets › NAM models.\n"
               "Use the same knob ranges as on your gear, and compare with your saved test recordings.\n"
               "Single concat models also open in NamParametricPlugin.")
 PLUGIN_URL = "https://github.com/phillipmself/NamParametricPlugin"
+DATE_FORMAT = "%Y-%m-%d %H:%M"  # not localized: the interface is English
 
 
 def link(text: str, callback):
@@ -115,6 +116,7 @@ class ListenPageMixin:
         self.test_table.verticalHeader().hide()
         self.test_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.test_table)
+        layout.addStretch(1)
         return main
 
     def _listen_aside(self) -> QWidget:
@@ -195,7 +197,7 @@ class ListenPageMixin:
             row.deleteLater()
         self.earlier_rows = []
         for run in self._runs:
-            stamp = datetime.fromtimestamp((run / "manifest.json").stat().st_mtime).strftime("%d %b, %H:%M")
+            stamp = datetime.fromtimestamp((run / "manifest.json").stat().st_mtime).strftime(DATE_FORMAT)
             parts = [stamp, run_state_text(run), run_model_type(run)] + (["shown"] if run == self._selected_run else [])
             row = link(" · ".join(p for p in parts if p), lambda checked=False, r=run: self._select_run(r))
             self._earlier_layout.addWidget(row)
@@ -208,7 +210,7 @@ class ListenPageMixin:
         self.model_card.setVisible(exported is not None)
         self.model_file_label.setText(f"{name}.nam")
         if exported:
-            trained = datetime.fromtimestamp((exported / "model_parametric.nam").stat().st_mtime).strftime("%d %b, %H:%M")
+            trained = datetime.fromtimestamp((exported / "model_parametric.nam").stat().st_mtime).strftime(DATE_FORMAT)
             controls = ", ".join(k.name for k in self.project.knob_specs()) if self.project else ""
             parts = (run_model_type(exported), controls, f"trained {trained}")
             self.model_details.setText(" · ".join(p for p in parts if p))
