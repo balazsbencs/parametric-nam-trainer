@@ -134,10 +134,6 @@ class JobsMixin:
         command, output, stopped = self.command, getattr(self, "_job_output", ""), self.stopping
         self._reset_process()
         self._refresh_runs()
-        if self._run_folder:
-            index = self.run_combo.findData(str(self._run_folder))
-            if index >= 0:
-                self.run_combo.setCurrentIndex(index)
         self._after_job(command, code, output, stopped)
 
     def _after_job(self, command: str, code: int, output: str, stopped: bool = False) -> None:
@@ -149,6 +145,9 @@ class JobsMixin:
         if command == "check":
             self._after_check(code, output)
             return
+        # Show the newest run with a model: the new one after success, the last good one after a failure.
+        self._selected_run = None
+        self._refresh_runs()
         if code == 0:
             self.train_alert.hide()
             self.train_progress.setValue(100)

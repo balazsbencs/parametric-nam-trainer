@@ -1,7 +1,7 @@
 """Plain-language messages for the main path. No Qt."""
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -101,3 +101,23 @@ def minutes_left(epoch_seconds: Sequence[float], epochs_left: int) -> int | None
     middle = len(ordered) // 2
     median = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
     return math.ceil(median * max(0, epochs_left) / 60)
+
+
+CHECKPOINT_NOTE = "These settings also chose the best training round, so the match can look better than on new settings."
+
+
+def metric_lines(metrics: Mapping) -> tuple[str, ...]:
+    """The last logged validation ESR of a run, with the honest note that it is not a fresh evaluation."""
+    tiers = metrics.get("tiers")
+    if isinstance(tiers, dict):
+        lines = []
+        for tier, values in tiers.items():
+            value = values.get("ESR") if isinstance(values, dict) else None
+            lines.append(f"{tier.capitalize()}: last validation ESR {value:.6g} · epoch {values.get('epoch')}"
+                         if isinstance(value, (int, float)) else f"{tier.capitalize()}: no validation ESR recorded")
+        return (*lines, "Last epochs, not separate evaluations of the exported checkpoints. Listen to both sizes.")
+    esr = metrics.get("ESR")
+    if isinstance(esr, (int, float)):
+        return (f"Last logged validation ESR: {esr:.6g} · epoch {metrics.get('epoch')}",
+                "This is the last epoch, not a separate evaluation of the exported checkpoint. Lower is better; listen too.")
+    return ("No validation metric recorded for this run. Inspect training.log for details.",)

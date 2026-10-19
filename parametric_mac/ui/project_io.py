@@ -5,8 +5,8 @@ import shutil
 from PySide6.QtWidgets import (
     QMessageBox, QFileDialog,
 )
-from nam.capture.project import save_project
-from ..controls import ControlProject as CaptureProject, ControlModel, load_project
+from nam.capture.project import atomic_write_json, save_project
+from ..controls import ControlProject as CaptureProject, ControlModel, load_project, model_config
 from ..control_editor import starter
 from nam.capture.session import CaptureSession
 from ..assets import FILES
@@ -167,3 +167,16 @@ class ProjectMixin:
             warning.setText(warning.text().replace('⚠', '').strip())
         if self._ready:
             self._sync_states()
+
+    def _on_export_concat_configs(self):
+        from nam.capture.export import write_concat_training_configs
+        def writer(project, directory):
+            selected_model = model_config(project, self.model_architecture.currentData())
+            paths = write_concat_training_configs(project, directory)
+            # The pinned upstream writer drops enums. Restore typed switch metadata.
+            for path in paths:
+                if 'model' in Path(path).name:
+                    atomic_write_json(path, selected_model)
+            return paths
+        from ..architectures import is_film
+        self._export_configs('FiLM A2' if is_film(self.model_architecture.currentData()) else 'ConcatWaveNet', writer)

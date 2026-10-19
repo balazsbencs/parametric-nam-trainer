@@ -9,18 +9,15 @@ from .widgets.common import PAGE_MARGIN, themed, label, PageScroll
 # StepBar is re-exported: tests and later pages import it from here.
 from .widgets.shell_bars import Footer, Step, StepBar, TopBar  # noqa: F401
 
-# Transitional order: later page tasks edit only this tuple (final: start, gear, connect, record, train, listen).
 STEPS: tuple[Step, ...] = (
     Step("start", "Start", False),
     Step("gear", "Gear", True),
     Step("connect", "Connect", True),
     Step("record", "Record", True),
     Step("train", "Train", True),
-    Step("review", "Review", True),
+    Step("listen", "Listen", True),
 )
 STEP_KEYS = tuple(step.key for step in STEPS)
-# Final step names that do not exist yet in the transitional STEPS (removed by Tasks 7, 9 and 12).
-STEP_ALIASES = {"listen": "review"}
 APPEARANCE_CHOICES = (("system", "Match macOS"), ("light", "Light"), ("dark", "Dark"))
 
 
@@ -88,9 +85,9 @@ class ShellMixin:
         self._connect_page()
         self._build_record_page()
         self._train_page()
-        self._review_page()
+        self._listen_page()
         actions = {"start": None, "gear": self._gear_footer, "connect": self.connect_button, "record": self._record_footer,
-                   "train": self._train_footer, "review": self.save_model_button}
+                   "train": self._train_footer, "listen": self.save_model_button}
         for key in STEP_KEYS:
             self.footer.add_action(key, actions[key])
 
@@ -143,7 +140,8 @@ class ShellMixin:
         self.fixed_notes.textChanged.connect(lambda *_: self._refresh_gear(effort=False))
         self.control_editor.changed.connect(self._controls_changed)
         self.gear_kind.currentIndexChanged.connect(self._gear_changed)
-        self.review_check.toggled.connect(self._save_review)
+        for check in self.listen_checks:
+            check.toggled.connect(self._save_review)
 
     def _page(self, title, intro, stack=None):
         scroll = PageScroll()
@@ -162,10 +160,9 @@ class ShellMixin:
         return layout
 
     def go_to_step(self, key: str) -> None:
-        key = STEP_ALIASES.get(key, key) if key not in STEP_KEYS else key
         self.pages.setCurrentIndex(STEP_KEYS.index(key))
         self.footer.show_step(key)
-        if key == "review":
+        if key == "listen":
             self._refresh_runs()
         if key == "record":
             self._refresh_level_cards()
@@ -193,11 +190,11 @@ class ShellMixin:
                  "gear": getattr(self, "project_dir", None) is not None,
                  "connect": bool(project) and self._route_ready(),
                  "record": complete,
-                 "train": self._exported_run() is not None, "review": False}
+                 "train": self._exported_run() is not None, "listen": False}
         return {key for key, value in flags.items() if value}
 
     def _refresh_steps(self) -> None:
-        if not hasattr(self, "top_bar") or not hasattr(self, "run_combo"):
+        if not hasattr(self, "top_bar") or not hasattr(self, "listen_checks"):
             return
         bar = self.top_bar.step_bar
         bar.set_states(self.step_states())
@@ -260,7 +257,8 @@ class ShellMixin:
         # Legacy config-only projects may be checked/trained without a capture manifest.
         self._sync_train(busy, not busy and (complete or (self.project is None and self.project_dir is not None)))
         self.cancel_button.setEnabled(self._worker is not None and self._cancel_token is not None)
-        self.review_check.setEnabled(not busy and self._exported_run() is not None)
+        for check in self.listen_checks:
+            check.setEnabled(not busy and self._exported_run() is not None)
         self.save_model_button.setEnabled(not busy and self._exported_run() is not None)
         self.footer.set_status(self._status_text())
         self._sync_recent_rows()
