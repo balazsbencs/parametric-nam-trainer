@@ -1,6 +1,5 @@
 """Listen page: the model file, the test settings, a listening checklist, and earlier models."""
 import json
-import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +10,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QFileDialog, QFrame
 from nam.capture.project import atomic_write_json
 
 from ...recent import safe_folder_name
+from ...review import qualified_model, save_model
 from ...theme import mono_font
 from ..copy import CHECKPOINT_NOTE, metric_lines
 from ..widgets.common import PAGE_MARGIN, PageScroll, button, disclosure, label
@@ -110,6 +110,10 @@ class ListenPageMixin:
         layout.addWidget(self.model_card)
         self.review_status = label("", "muted")
         layout.addWidget(self.review_status)
+        self.qualification_status = label("", "muted")
+        layout.addWidget(self.qualification_status)
+        self.qualify_button = button("Qualify saved run", lambda: self._start("qualify"))
+        layout.addWidget(self.qualify_button, alignment=Qt.AlignLeft)
         layout.addWidget(label("Test settings — not used to train the model", "muted"))
         self.test_table = QTableWidget()
         self.test_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -174,14 +178,14 @@ class ListenPageMixin:
 
     def _exported_run(self) -> Path | None:
         run = getattr(self, "_selected_run", None)
-        return run if run and (run / "model_parametric.nam").is_file() else None
+        return run if run and qualified_model(run) is not None else None
 
     def _refresh_runs(self) -> None:
         folder = self.project_dir / "outputs" if self.project_dir else None
         runs = [p for p in folder.iterdir() if p.is_dir() and (p / "manifest.json").is_file()] if folder and folder.is_dir() else []
         self._runs = sorted(runs, key=lambda p: (p / "manifest.json").stat().st_mtime_ns, reverse=True)
         if self._selected_run not in self._runs:
-            with_model = [r for r in self._runs if (r / "model_parametric.nam").is_file()]
+            with_model = [r for r in self._runs if qualified_model(r) is not None]
             self._selected_run = (with_model or self._runs or [None])[0]
         self._show_earlier()
         self._show_run()
@@ -210,7 +214,7 @@ class ListenPageMixin:
         self.model_card.setVisible(exported is not None)
         self.model_file_label.setText(f"{name}.nam")
         if exported:
-            trained = datetime.fromtimestamp((exported / "model_parametric.nam").stat().st_mtime).strftime(DATE_FORMAT)
+            trained = datetime.fromtimestamp((exported / "playback/model_playback.nam").stat().st_mtime).strftime(DATE_FORMAT)
             controls = ", ".join(k.name for k in self.project.knob_specs()) if self.project else ""
             parts = (run_model_type(exported), controls, f"trained {trained}")
             self.model_details.setText(" · ".join(p for p in parts if p))
@@ -222,6 +226,13 @@ class ListenPageMixin:
             check.blockSignals(True)
             check.setChecked(value)
             check.blockSignals(False)
+        qualification = read_json(run / "playback/qualification.json") if run else {}
+        self.qualification_status.setText("Playback checks passed. Listening and pedal timing still need assessment." if exported else
+            qualification.get("error", "A qualified playback model is required before saving. Confirm input mapping in Train → Expert settings, then qualify this run.") +
+            (" Re-qualify the run if its model file was changed." if qualification.get("passed") else ""))
+        if exported and "mean_validation_esr" in qualification:
+            self.review_metric.setText(f"Playback held-out ESR: mean {qualification['mean_validation_esr']:.6g} · worst {qualification['max_validation_esr']:.6g}\n"
+                                       f"Stress-tested {len(qualification.get('stress', []))} control settings. Listening is still required.")
         self._show_test_settings()
         self._sync_states()
 
@@ -259,12 +270,10 @@ class ListenPageMixin:
         dest, _ = QFileDialog.getSaveFileName(self, "Save model", self._default_model_name(), "NAM model (*.nam)")
         if not dest:
             return
-        source = run / "model_parametric.nam"
         try:
-            if Path(dest).resolve() != source.resolve():
-                shutil.copy2(source, dest)
+            save_model(run, dest)
             self.review_note.setText(f"Model saved to {dest}.")
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             self.review_note.setText(f"Could not save the model: {exc}")
 
     def _default_model_name(self) -> str:

@@ -61,6 +61,9 @@ def add_run(window) -> None:
     (run / "metrics.json").write_text(json.dumps({"tiers": {"standard": {"epoch": 200, "ESR": 0.0123},
                                                             "nano": {"epoch": 200, "ESR": 0.0211}}}))
     (run / "model_parametric.nam").write_text("{}")
+    (run / "playback").mkdir(exist_ok=True)
+    (run / "playback/model_playback.nam").write_text("{}")
+    (run / "playback/qualification.json").write_text(json.dumps({"passed": True, "model_sha256": hashlib.sha256((run / "playback/model_playback.nam").read_bytes()).hexdigest()}))
 
 
 class Renderer:

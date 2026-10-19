@@ -27,6 +27,10 @@ def make_run(name, model, age):
     (run / "metrics.json").write_text('{"epoch": 2, "ESR": 0.031}')
     if model:
         (run / "model_parametric.nam").write_text("{}")
+
+        (run / "playback").mkdir(exist_ok=True)
+        (run / "playback/model_playback.nam").write_text("{}")
+        (run / "playback/qualification.json").write_text(json.dumps({"passed": True, "model_sha256": hashlib.sha256((run / "playback/model_playback.nam").read_bytes()).hexdigest()}))
     stamp = time.time() - age
     os.utime(run / "manifest.json", (stamp, stamp))
     return run
@@ -89,6 +93,10 @@ def make_run(name, model, age, architecture="a2-nano"):
     (run / "status.json").write_text(json.dumps({"status": "exported" if model else "failed_or_interrupted"}))
     if model:
         (run / "model_parametric.nam").write_text("{}")
+
+        (run / "playback").mkdir(exist_ok=True)
+        (run / "playback/model_playback.nam").write_text("{}")
+        (run / "playback/qualification.json").write_text(json.dumps({"passed": True, "model_sha256": hashlib.sha256((run / "playback/model_playback.nam").read_bytes()).hexdigest()}))
     stamp = time.time() - age
     os.utime(run / "manifest.json", (stamp, stamp))
     return run
@@ -128,3 +136,26 @@ print("OK")
 
 def test_listen_runs_types_and_names():
     run_gui(RUNS_SCRIPT)
+
+
+def test_rebased_playback_job_arguments_and_project_reset():
+    run_gui(LISTEN_SCRIPT.replace('print("OK")', r'''
+from unittest.mock import patch
+from PySide6.QtCore import QProcess
+calls = []
+with patch.object(QProcess, "start", lambda process, executable, args: calls.append(args)):
+    window.playback_pad.setValue(12)
+    window.playback_confirm.setChecked(True)
+    window._start("qualify")
+    assert calls[-1] == ["-m", "parametric_mac", "qualify", str(old), "--input-pad-db", "12.0"], calls
+    assert window._busy() and not window.playback_pad.isEnabled() and not window.qualify_button.isEnabled()
+    window._reset_process()
+    for entry in window.project.entries:
+        entry.status = "captured"
+    window._start("train")
+    assert calls[-1][-2:] == ["--input-pad-db", "12.0"], calls
+    window._reset_process()
+window._start_new_capture()
+assert window.playback_pad.value() == 0 and not window.playback_confirm.isChecked()
+print("OK")
+'''))

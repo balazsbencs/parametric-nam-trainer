@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib
 import logging
+import math
 import shutil
 from PySide6.QtWidgets import (
     QMessageBox, QFileDialog,
@@ -174,6 +175,17 @@ class ProjectMixin:
         # "Try again on CPU" settings belong to one run; they must not slow down the next project.
         self.device.setCurrentIndex(max(0, self.device.findData("auto")))
         self.batch.setValue(4)
+        mapping = self._workflow.get("playback_calibration", {})
+        if (not isinstance(mapping, dict) or isinstance(mapping.get("input_pad_db", 0), bool)
+                or not isinstance(mapping.get("input_pad_db", 0), (int, float))
+                or not math.isfinite(mapping.get("input_pad_db", 0)) or not 0 <= mapping.get("input_pad_db", 0) <= 30):
+            mapping = {}
+        for widget in (self.playback_pad, self.playback_confirm):
+            widget.blockSignals(True)
+        self.playback_pad.setValue(mapping.get("input_pad_db", 0))
+        self.playback_confirm.setChecked(mapping.get("confirmed") is True)
+        for widget in (self.playback_pad, self.playback_confirm):
+            widget.blockSignals(False)
 
     def _route_ready(self):
         return self._connect_ready()

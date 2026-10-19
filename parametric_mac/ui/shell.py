@@ -203,7 +203,7 @@ class ShellMixin:
 
     def _status_text(self) -> str:
         if self.process:
-            return "Checking recordings…" if self.command == "check" else "Training in progress…"
+            return "Checking playback model…" if self.command == "qualify" else "Checking recordings…" if self.command == "check" else "Training in progress…"
         if self._worker:
             return "Audio operation running…"
         if not self.project:
@@ -254,6 +254,9 @@ class ShellMixin:
         self.capture_next_button.setEnabled(can_record and self._next_pending_entry() is not None)
         self._sync_record_loop(busy, can_record, complete)
         self.model_architecture.setEnabled(not busy)
+        self.playback_pad.setEnabled(not busy)
+        self.playback_confirm.setEnabled(not busy)
+        self.qualify_button.setEnabled(not busy and self._selected_run is not None and self.playback_confirm.isChecked())
         # Legacy config-only projects may be checked/trained without a capture manifest.
         self._sync_train(busy, not busy and (complete or (self.project is None and self.project_dir is not None)))
         self.cancel_button.setEnabled(self._worker is not None and self._cancel_token is not None)

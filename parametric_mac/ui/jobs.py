@@ -44,6 +44,9 @@ class JobsMixin:
         if command == "train" and self.project and (not self.project.entries or self.project.pending_entries()):
             self.status_label.setText("Finish recording first.")
             return
+        if command == "qualify" and (self._selected_run is None or not self.playback_confirm.isChecked()):
+            self.status_label.setText("Confirm input mapping in Train, then select a saved run.")
+            return
         self.stopping = False
         self.command = command
         self._run_folder = None
@@ -63,16 +66,21 @@ class JobsMixin:
         env.insert("MPLBACKEND", "Agg")
         process.setProcessEnvironment(env)
         process.setWorkingDirectory(str(self.project_dir))
-        args = ["-m", "parametric_mac", command, str(self.project_dir)]
-        args += ["--architecture", self.model_architecture.currentData()]
+        if command == "qualify":
+            self._run_folder = self._selected_run
+            args = ["-m", "parametric_mac", "qualify", str(self._run_folder), "--input-pad-db", str(self.playback_pad.value())]
+        else:
+            args = ["-m", "parametric_mac", command, str(self.project_dir), "--architecture", self.model_architecture.currentData()]
         if command == "train":
             args += ["--device", self.device.currentData(), "--epochs", str(self.epochs.value()), "--batch", str(self.batch.value())]
+            if self.playback_confirm.isChecked():
+                args += ["--input-pad-db", str(self.playback_pad.value())]
         self.process = process
         process.readyReadStandardOutput.connect(self._read_log)
         process.finished.connect(self._finished)
         process.errorOccurred.connect(self._process_error)
-        self.stop_button.setText("Stop check" if command == "check" else "Stop training")
-        self.train_stage_title.setText("Checking your recordings…" if command == "check" else "Training")
+        self.stop_button.setText("Stop check" if command in ("check", "qualify") else "Stop training")
+        self.train_stage_title.setText("Checking playback model…" if command == "qualify" else "Checking your recordings…" if command == "check" else "Training")
         self.train_stage_note.setText("")
         for value in (self.train_percent, self.train_time_left, self.train_rounds):
             value.setText("—")
@@ -145,13 +153,20 @@ class JobsMixin:
         if command == "check":
             self._after_check(code, output)
             return
+        if command == "qualify":
+            self._refresh_runs()
+            self.status_label.setText("Playback checks passed. Open Listen to save and assess the model." if code == 0 else
+                                      "Playback checks failed. Open Listen and the log for details; recordings and checkpoints are preserved.")
+            if code != 0:
+                self.train_log_toggle.setChecked(True)
+            return
         # Show the newest run with a model: the new one after success, the last good one after a failure.
         self._selected_run = None
         self._refresh_runs()
         if code == 0:
             self.train_alert.hide()
             self.train_progress.setValue(100)
-            self.status_label.setText("Your model is ready.")
+            self.status_label.setText("Training finished. Open Listen for playback qualification and listening.")
             self._sync_states()
             return
         # Only the real error: Apple GPU runs also log harmless lines that mention "MPS" or "memory".

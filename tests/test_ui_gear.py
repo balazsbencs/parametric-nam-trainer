@@ -119,6 +119,10 @@ first = window.project_dir
 window._apply_quality(4)
 run = first / "outputs" / "r1"; run.mkdir(parents=True)
 (run / "manifest.json").write_text("{}"); (run / "model_parametric.nam").write_text("{}")
+
+(run / "playback").mkdir(exist_ok=True)
+(run / "playback/model_playback.nam").write_text("{}")
+(run / "playback/qualification.json").write_text(json.dumps({"passed": True, "model_sha256": hashlib.sha256((run / "playback/model_playback.nam").read_bytes()).hexdigest()}))
 window._refresh_runs()
 assert window._exported_run() is not None
 window._start_new_capture(); app.processEvents()

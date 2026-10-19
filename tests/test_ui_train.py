@@ -1,7 +1,7 @@
 from gui_harness import run_gui
 
 TRAIN_SCRIPT = r"""
-import hashlib, tempfile
+import hashlib, json, tempfile
 from pathlib import Path
 import numpy as np, soundfile as sf
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton
@@ -77,8 +77,12 @@ assert window.training_chart.current_tier == "nano" and "Nano" in window.train_s
 # Success: the model is ready, Next: Listen is the one filled button, Train again is an outline.
 run = window.project_dir / "outputs" / "r1"; run.mkdir(parents=True)
 (run / "manifest.json").write_text("{}"); (run / "model_parametric.nam").write_text("{}")
+
+(run / "playback").mkdir(exist_ok=True)
+(run / "playback/model_playback.nam").write_text("{}")
+(run / "playback/qualification.json").write_text(json.dumps({"passed": True, "model_sha256": hashlib.sha256((run / "playback/model_playback.nam").read_bytes()).hexdigest()}))
 window._refresh_runs(); window._after_job("train", 0, ""); app.processEvents()
-assert window.status_label.text() == "Your model is ready."
+assert "Training finished" in window.status_label.text()
 primaries = [b for b in window.findChildren(QPushButton) if b.property("primary") and b.isVisible()]
 assert primaries == [window.train_continue], [b.text() for b in primaries]
 assert window.train_button.text() == "Train again" and window.train_button.property("outline")

@@ -1,7 +1,7 @@
 """Train page: one choice, one start button, live progress, and plain failures."""
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QPlainTextEdit, QProgressBar, QSizePolicy,
-                               QSpinBox, QVBoxLayout, QWidget)
+                               QSpinBox, QDoubleSpinBox, QCheckBox, QVBoxLayout, QWidget)
 
 from ...theme import mono_font
 
@@ -137,6 +137,18 @@ class TrainPageMixin:
             self.model_architecture.addItem(title, key)
         self.model_architecture.currentIndexChanged.connect(self._save_architecture)
         self.architecture_hint = label("", "muted")
+        self.playback_pad = QDoubleSpinBox()
+        self.playback_pad.setRange(0, 30)
+        self.playback_pad.setSuffix(" dB")
+        self.playback_pad.setAccessibleName("Playback input attenuation")
+        self.playback_confirm = QCheckBox("I confirmed the playback input mapping for these recordings")
+        self.playback_pad.valueChanged.connect(self._save_playback_mapping)
+        self.playback_confirm.toggled.connect(self._save_playback_mapping)
+        form.addRow("Playback input attenuation", self.playback_pad)
+        form.addRow(label("Use 0 dB when playback and capture use the same digital input scale. "
+                          "Use 12 dB for the prepared Bassman teacher dataset. This changes model drive; "
+                          "do not infer it from the recording peak. Protected playback currently supports concat models.", "muted"))
+        form.addRow(self.playback_confirm)
         self.device = QComboBox()
         self.device.addItem("Automatic · Apple GPU when available", "auto")
         self.device.addItem("Apple GPU · MPS", "mps")
@@ -199,6 +211,13 @@ class TrainPageMixin:
         self.train_button.setEnabled(can_train)
         for card in self.mode_cards:
             card.setEnabled(can_train)
+
+    def _save_playback_mapping(self, *args):
+        if self._ready and not self._applying and self.project_dir and not self._busy():
+            self._workflow["playback_calibration"] = {"confirmed": self.playback_confirm.isChecked(),
+                                                     "input_pad_db": self.playback_pad.value()}
+            write_state(self.project_dir, self._workflow)
+            self._sync_states()
 
     def _save_architecture(self, *args):
         from ...architectures import is_film, is_dual
