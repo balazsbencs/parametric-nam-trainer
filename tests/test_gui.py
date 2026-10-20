@@ -178,7 +178,7 @@ playback = run / 'playback'
 playback.mkdir()
 (playback / 'model_playback.nam').write_text('{"qualified":"fixture"}')
 digest = hashlib.sha256((playback / 'model_playback.nam').read_bytes()).hexdigest()
-(playback / 'qualification.json').write_text(json.dumps({'passed': True, 'model_sha256': digest}))
+(playback / 'qualification.json').write_text(json.dumps({'passed': True, 'model_sha256': digest, 'policy': {'version': 3}, 'transients': {'passed': True}}))
 window.go_to(4)
 assert window.save_model_button.isEnabled()
 (playback / 'model_playback.nam').write_text('{"changed":true}')

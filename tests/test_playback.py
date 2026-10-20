@@ -29,6 +29,14 @@ def trained_run(project):
         for entry in data["validation"]:
             y = net(torch.from_numpy(x)[None], params=torch.tensor([[entry["params"]["Drive"]]])).numpy()[0]
             sf.write(project / entry["y_path"], y, rate, subtype="FLOAT")
+    import shutil
+    shutil.copyfile(project/'input.wav', project/'reserved-input.wav')
+    reserved = {'version':1, 'common': {'x_path':'reserved-input.wav', 'delay':0}, 'validation': []}
+    for i, entry in enumerate(data['validation']):
+        name = f'reserved-{i}.wav'
+        shutil.copyfile(project/entry['y_path'], project/name)
+        reserved['validation'].append({'y_path':name, 'params':entry['params']})
+    atomic_write_json(project/'transient_validation.json', reserved)
     out = prepare_run(project, "cpu", 1, 1, input_pad_db=6)
     atomic_write_json(out / "model_parametric.nam", document)
     return out
@@ -131,6 +139,11 @@ def test_dual_requires_both_tiers_to_pass(project):
     data = json.loads((project / "data.json").read_text())
     for entry in data["validation"]:
         sf.write(project / entry["y_path"], np.full(16384, .1), 48000, subtype="FLOAT")
+    import shutil
+    shutil.copyfile(project/'input.wav', project/'reserved-input.wav')
+    sf.write(project/'reserved-target.wav', np.full(16384,.1),48000,subtype='FLOAT')
+    atomic_write_json(project/'transient_validation.json', {'version':1, 'validation':[
+        {'x_path':'reserved-input.wav', 'y_path':'reserved-target.wav', 'params':{'Drive':4}}]})
     out = prepare_run(project, "cpu", 1, 1, "a2-dual", input_pad_db=0)
     recipe = json.loads((project / "model_concat.json").read_text())
     for tier in ("standard", "nano"):
@@ -157,3 +170,13 @@ def test_dual_requires_both_tiers_to_pass(project):
     report = qualify_run(out)
     assert not report["passed"] and not report["tiers"]["Nano"]["passed"]
     assert qualified_model(out) is None
+
+
+def test_old_boundedness_only_report_cannot_enable_save(trained_run):
+    assert qualify_run(trained_run)['passed']
+    path = trained_run/'playback/qualification.json'
+    report=json.loads(path.read_text())
+    report['policy']['version']=2
+    report.pop('transients')
+    atomic_write_json(path,report)
+    assert qualified_model(trained_run) is None

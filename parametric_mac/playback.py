@@ -18,7 +18,7 @@ import torch
 from nam.models.parametric import ConcatWaveNet
 
 POLICY = {
-    "version": 2, "input_pad_db": 0.0, "raw_output_ceiling": 0.8,
+    "version": 3, "input_pad_db": 0.0, "raw_output_ceiling": 0.8,
     "normalized_output_ceiling": 10 ** (-1 / 20),
     "max_mean_validation_esr": 0.10, "max_capture_validation_esr": 0.25,
 }
@@ -43,8 +43,11 @@ def load(document):
 def calibrated(document, policy=POLICY):
     if document.get("metadata", {}).get("ardor_playback"):
         raise ValueError("Already calibrated; input attenuation must not be applied twice")
-    if document.get("metadata", {}).get("input_level_dbu") is not None:
-        raise ValueError("Analog-calibrated captures need an explicit level mapping; this exporter requires an explicit digital input mapping")
+    analog = document.get("metadata", {}).get("input_level_dbu")
+    reference = policy.get('input_reference', {})
+    if analog is not None and not (reference.get('kind') == 'analog' and
+                                  math.isclose(float(analog), reference['capture_full_scale_dbu'], abs_tol=1e-4)):
+        raise ValueError("Analog NAM input reference must match the recorded capture full-scale level")
     if not 0 <= policy["input_pad_db"] <= 30 or not 0 < policy["raw_output_ceiling"] <= 1:
         raise ValueError("Invalid playback calibration policy")
     net = load(document)
@@ -157,7 +160,7 @@ def control_grid(specs, validation_params, limit=256):
     return grid, exhaustive
 
 
-def _qualify_document(document, data, policy):
+def _qualify_document(document, data, policy, transients=None):
     from nam.data import Dataset
     net = load(document)
     specs = document["config"]["params"]
@@ -176,7 +179,8 @@ def _qualify_document(document, data, policy):
             dataset = Dataset.init_from_config(config)
             try:
                 x, target = dataset.x, dataset.y
-                prediction = net((x*boost)[None], params=torch.tensor([[params[s["name"]] for s in specs]])).double()[0]
+                from .transients import predict
+                prediction = predict(net, x*boost, torch.tensor([[params[s['name']] for s in specs]])).double()
                 skip = min(max(net.receptive_field-1, min(24000, len(x)//4)), len(x)-1)
                 target = target.double()[skip:]
                 error = prediction[skip:] - target
@@ -202,11 +206,13 @@ def _qualify_document(document, data, policy):
                            "finite": valid, "normalized_peak": peak})
             if (index+1) % 32 == 0:
                 print(f"Playback checks: {index+1}/{len(grid)} control settings", flush=True)
-    passed = (finite and mean <= policy["max_mean_validation_esr"]
+    from .transients import qualify as qualify_transients
+    transient_report = qualify_transients(net, transients, policy['input_pad_db'], policy['raw_output_ceiling'])
+    passed = (transient_report['passed'] and finite and mean <= policy["max_mean_validation_esr"]
               and worst <= policy["max_capture_validation_esr"]
               and all(s["finite"] and s["normalized_peak"] <= policy["normalized_output_ceiling"]*1.00001 for s in stress))
     return {"passed": bool(passed), "mean_validation_esr": mean, "max_validation_esr": worst,
-            "validation": rows, "stress": stress, "grid_exhaustive": exhaustive,
+            "validation": rows, "transients": transient_report, "stress": stress, "grid_exhaustive": exhaustive,
             "policy": policy, "limitations": "Recorded-level fidelity and sampled overload tests; listening and hardware deadlines remain separate."}
 
 
@@ -229,7 +235,11 @@ def _qualify_run(run, input_pad_db=None):
             input_pad_db = calibration.get("input_pad_db")
         if isinstance(input_pad_db, bool) or not isinstance(input_pad_db, (int, float)) or not math.isfinite(input_pad_db) or not 0 <= input_pad_db <= 30:
             raise ValueError("Playback input pad must be a finite number between 0 and 30 dB")
+        if calibration.get('source') == 'recorded_input_reference' and abs(input_pad_db-calibration['input_pad_db']) > 1e-6:
+            raise ValueError('Explicit input pad conflicts with the saved recorded input reference')
         policy = dict(POLICY, input_pad_db=float(input_pad_db))
+        if calibration.get('reference'):
+            policy['input_reference'] = calibration['reference']
         data = read_json(run / "data.json")
         hashes = manifest.get("audio_sha256", {})
         if not hashes:
@@ -237,13 +247,20 @@ def _qualify_run(run, input_pad_db=None):
         for path, expected in hashes.items():
             if digest(path) != expected:
                 raise ValueError(f"Recording changed since training: {path}")
+        transients = read_json(run / 'transient_validation.json') if manifest.get('transient_validation') else None
+        if transients is not None:
+            for row in transients['validation']:
+                for key in ('x_path', 'y_path'):
+                    path = {**transients.get('common', {}), **row}[key]
+                    if path not in hashes:
+                        raise ValueError('Transient reference has no recorded audio hash')
         source = run / "model_parametric.nam"
         original = read_json(source)
         reports = {}
         if original.get("architecture") == "SlimmableContainer":
             for tier in original["config"]["submodels"]:
                 model = calibrated(tier["model"], policy)
-                reports[tier["name"]] = _qualify_document(model, data, policy)
+                reports[tier["name"]] = _qualify_document(model, data, policy, transients)
                 atomic_write_json(destination / f"{tier['name'].lower()}-candidate.json", model)
             if not all(report["passed"] for report in reports.values()):
                 report = {"passed": False, "tiers": reports, "error": "One or more tiers failed playback checks. Keep the checkpoints; inspect fidelity and input mapping."}
@@ -254,14 +271,14 @@ def _qualify_run(run, input_pad_db=None):
             report = {"passed": True, "tiers": reports}
         else:
             document = calibrated(original, policy)
-            report = _qualify_document(document, data, policy)
+            report = _qualify_document(document, data, policy, transients)
             atomic_write_json(destination / "candidate.json", document)
         report.update(source_sha256=digest(source), policy=policy)
         if report["passed"]:
             atomic_write_json(final, document)
             report["model_sha256"] = digest(final)
         else:
-            report["error"] = "Playback checks failed. Inspect validation error and input mapping; checkpoints are retained."
+            report["error"] = "Playback checks failed. Inspect validation, transient response and input mapping; checkpoints are retained."
         atomic_write_json(destination / "qualification.json", report)
         return report
     except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:

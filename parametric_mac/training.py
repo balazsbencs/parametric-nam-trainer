@@ -47,7 +47,7 @@ def mac_learning_config(original, device, epochs=200, batch=4):
     return config
 
 
-def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None, input_pad_db=None):
+def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None, input_pad_db=None, warm_start=None):
     directory = Path(directory).expanduser().resolve()
     state = read_state(directory)
     calibration = copy.deepcopy(state.get("playback_calibration", {}))
@@ -71,7 +71,29 @@ def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None
         data = read_json(directory / "data.json")
         model = read_json(directory / "model_concat.json")
         learning = read_json(directory / "learning_concat.json")
+    from .transients import project_data, reserved_data
+    from .input_reference import resolve_reference
+    data = project_data(directory, data)
+    reference = resolve_reference(directory, data)
+    if reference is not None:
+        if input_pad_db is not None and abs(input_pad_db-reference['input_pad_db']) > 1e-6:
+            raise ValueError('Explicit input pad conflicts with the recorded input reference')
+        calibration = reference
+    transients = reserved_data(directory)
+    if warm_start is None:
+        configured = state.get('warm_start_path')
+        recipe_path = directory / 'fine_tune.json'
+        if configured:
+            warm_start = directory / configured
+        elif 'warm_start_path' not in state and recipe_path.exists():
+            warm_start = directory / read_json(recipe_path)['source']
     model = apply_architecture(model, architecture)
+    warm = None
+    if warm_start is not None:
+        if is_dual(architecture):
+            raise ValueError('Choose a single matching tier for raw NAM fine-tuning')
+        from .warm_start import prepare
+        model, data, warm = prepare(Path(warm_start), model, data)
     report = check_project(directory, data, model)
     if not report.ok:
         raise ValueError(report.text())
@@ -96,11 +118,31 @@ def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None
     import torch
     import nam
     manifest.update(torch_version=torch.__version__, nam_version=nam.__version__)
+    if warm is not None:
+        import shutil
+        shutil.copyfile(warm_start, out / 'warm_start.nam')
+        manifest['warm_start'] = warm
+    if transients is not None:
+        # Qualification inputs/targets must be separate files from both fitting
+        # and epoch-selection data. Control values may overlap by design.
+        fitting_paths = {str((directory / {**data.get('common', {}), **row}[key]).resolve())
+                         for split in ('train', 'validation') for row in data[split]
+                         for key in ('x_path', 'y_path')}
+        reserved_paths = {str(Path({**transients.get('common', {}), **row}[key]).resolve())
+                          for row in transients['validation'] for key in ('x_path', 'y_path')}
+        if fitting_paths & reserved_paths:
+            raise ValueError('Transient qualification recordings must be reserved from training and epoch validation')
+        manifest['transient_validation'] = True
+        (out / 'transient_validation.json').write_text(json.dumps(transients, indent=2)+'\n')
     paths = set()
     for split in ("train", "validation"):
         for entry in data[split]:
             merged = {**data.get("common", {}), **entry}
             paths.update(merged[k] for k in ("x_path", "y_path"))
+    if transients is not None:
+        for row in transients['validation']:
+            merged = {**transients.get('common', {}), **row}
+            paths.update(merged[k] for k in ('x_path', 'y_path'))
     manifest["audio_sha256"] = {}
     for path in sorted(paths):
         digest = hashlib.sha256()
@@ -114,6 +156,8 @@ def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None
         for tier in ("standard", "nano"):
             child = out / "tiers" / tier
             child.mkdir(parents=True)
+            if transients is not None:
+                (child / 'transient_validation.json').write_text(json.dumps(transients, indent=2)+'\n')
             profile = f"{'film' if is_film(architecture) else 'a2'}-{tier}"
             for name, value in (("data", data), ("model", apply_architecture(model, profile)),
                                 ("learning", learning), ("manifest", {**manifest,
@@ -138,10 +182,10 @@ def finish_exports(out):
         atomic_write_json(path, model)
 
 
-def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False, architecture=None, input_pad_db=None):
+def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False, architecture=None, input_pad_db=None, warm_start=None):
     # Fail unsupported operations visibly, rather than quietly falling back on CPU.
     # Users can explicitly retry the identical captured dataset with --device cpu.
-    out = prepare_run(directory, device, epochs, batch, architecture, input_pad_db)
+    out = prepare_run(directory, device, epochs, batch, architecture, input_pad_db, warm_start)
     print(f"Run folder: {out}", flush=True)
     print(f"Settings: {read_json(out / 'manifest.json')['device']}, {epochs} epochs, batch {batch}", flush=True)
     if dry_run:
@@ -242,7 +286,19 @@ def _train_prepared(out, tier="", epoch_offset=0, total_epochs=None):
         def export_model(model, *args, **kwargs):
             return (export_film if isinstance(model, FiLMA2) else original_export)(model, *args, **kwargs)
         trainer_module._export_parametric = export_model
-    trainer_module._create_parametric_callbacks = lambda *a, **kw: [*create_callbacks(*a, **kw), Progress()]
+    manifest = read_json(out / 'manifest.json')
+    class WarmStart(pl.Callback):
+        def on_fit_start(self, trainer, module):
+            # Lightning restores the optimizer/checkpoint after model construction;
+            # never overwrite a restored checkpoint on resume.
+            if read_json(out / 'learning.json').get('trainer_fit_kwargs', {}).get('ckpt_path'):
+                return
+            from .warm_start import initialize
+            initialize(trainer_module._get_parametric_net(module), out / 'warm_start.nam',
+                       manifest['warm_start']['source_sha256'])
+            print('Initialized fine-tuning from the raw NAM; targets retain raw recording units.', flush=True)
+    trainer_module._create_parametric_callbacks = lambda *a, **kw: [*create_callbacks(*a, **kw), Progress(),
+                                                                  *([WarmStart()] if manifest.get('warm_start') else [])]
     try:
         with (out / "training.log").open("w", buffering=1) as logfile:
             with redirect_stdout(Tee(sys.stdout, logfile)), redirect_stderr(Tee(sys.stderr, logfile)):
