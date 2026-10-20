@@ -1,5 +1,11 @@
 # Validation and first Mac session
 
+## Find my connection, Phase 2 (October 20, 2026)
+
+The full suite passed on this Mac: **193 tests**, exit code zero, with 20 upstream deprecation warnings. New tests: `tests/test_find_route.py` (click detection, loopback test, route choice), `tests/test_find_scan.py` (one output at a time on a synthetic rig, several routes, cancel, dropout, large devices) and `tests/test_ui_find.py` (the Connect button, every result state, cancel while it runs, device change). Line coverage: `find_route.py` 96%, `find_scan.py` 100% (the sounddevice call is excluded; it needs a sound card); the Connect code runs only in GUI subprocess tests, so it has no coverage number.
+
+Find plays upstream's click preamble at **−20 dBFS** (`FIND_AMPLITUDE = 0.1`), below the route test level. With synthetic returns, detection works down to about −60 dBFS over a −90 dBFS noise floor and −50 dBFS over −80 dBFS, for round trips up to 20,000 samples; the clicks must stand about 30 dB above the noise. A return is a digital loopback when, after delay alignment and gain matching, the residual is **−80 dB** or lower. Not yet verified on real sound cards.
+
 ## Console redesign (October 19, 2026)
 
 The full suite passed on this Mac: **122 tests**, exit code zero, with 20 upstream deprecation warnings. New tests cover the theme tokens and WCAG AA contrast in both modes, the style sheet and appearance switch, the shell, and every page (Start, Gear, Connect, Record, Train, Listen), including the six Review Focus cases of the [Phase 1 plan](superpowers/plans/2026-10-17-ux-redesign-phase1.md). Line coverage of the pure modules: `recent.py` 97%, `ui/copy.py` 97%, `ui/tokens.py` 98%, `workflow.py` 85%. The user approved the light theme from offscreen screenshots. Not yet verified: native macOS menus and popups in each theme, real CoreAudio recording, and full MPS training with the new screens.
