@@ -5,8 +5,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-# A route test at or above this peak is too close to clipping (the rule the app already used).
-ROUTE_CLIP_DBFS = -1.0
+from ..find_route import CLIP_DBFS as ROUTE_CLIP_DBFS  # one clip rule; the UI imports the core
 
 CLIP_TEXT = "The signal is too close to clipping. Turn the reamp box or the sound card input down a little, then check again."
 
