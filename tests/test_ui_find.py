@@ -93,6 +93,16 @@ assert window.find_try_again.isVisible() and window.find_manual.isVisible()
 assert window.find_loopback_note.isHidden()
 window.find_manual.click(); app.processEvents()
 assert window.audio_advanced.isVisible() and window.output_channel_spin.isVisible()
+assert "turn its volume" in window.find_result.text()
+locked = window._plan_locked
+window._plan_locked = lambda: True  # recording has started: levels stay fixed (spec §4.3)
+run_find(lambda target, progress, cancel: FindResult("none", (), ()))
+assert window.find_result.text().startswith("No signal came back.") and "turn its volume" not in window.find_result.text()
+window._plan_locked = locked
+window._route_fingerprint = "checked"  # a passed level check: "Do not touch the sound card gain"
+run_find(lambda target, progress, cancel: FindResult("none", (), ()))
+assert "turn its volume" not in window.find_result.text()
+window._route_fingerprint = None
 
 # Cancel: nothing changes.
 def cancelled(target, progress, cancel):
@@ -120,6 +130,7 @@ run_find(lambda target, progress, cancel: several)
 assert window.find_result.text().startswith("More than one connection answered.")
 links = [b for b in window.find_route_links.findChildren(QPushButton) if b.isVisible()]
 assert [b.text() for b in links] == ["Use Output 2 → Input 1", "Use Output 3 → Input 4"], [b.text() for b in links]
+assert window.find_try_again.isVisible() and window.find_manual.isVisible()  # a way out if neither is right
 links[1].click(); app.processEvents()
 assert channels() == (3, 4) and saved() == (3, 4)
 assert window.find_result.text().startswith("Found: Output 3 → Input 4.") and window.find_route_links.isHidden()
@@ -132,6 +143,7 @@ assert channels() == (2, 1) and CLIP_TEXT in window.find_result.text()
 assert window.find_stop_note.isHidden()
 run_find(lambda target, progress, cancel: FindResult("found", (Route(2, 1, -18.0, ()),), (), True))
 assert window.find_stop_note.text() == "Stopped at the first answer: this sound card has 4 outputs."
+assert "Check that Output 2 goes to the reamp box." in window.find_result.text(), window.find_result.text()
 assert not window.find_stop_note.isHidden()
 
 # Another sound card: the old result and its route links no longer apply.

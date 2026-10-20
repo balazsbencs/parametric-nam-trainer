@@ -14,6 +14,10 @@ CLIP_TEXT = "The signal is too close to clipping. Turn the reamp box or the soun
 FIND_NONE_TEXT = "No signal came back. Check the cables, and check that the reamp box and the pedal have power."
 FIND_FAILED_TEXT = "The sound card stopped during the search. Check that nothing else uses it, then try again."
 FIND_CANCELLED_TEXT = "Search cancelled."
+FIND_SILENT_TEXT = ("Every input recorded total silence. Allow microphone access for the app that opened Parametric "
+                    "(usually Terminal or Python) in System Settings › Privacy & Security › Microphone, then try again.")
+# Find stays at −20 dBFS, so a very quiet or dark path can miss it (final review, I2).
+FIND_QUIET_HINT = "If your gear is quiet or dark, turn its volume or the sound card input gain up a little, then try again."
 
 
 def _and_list(numbers: Sequence[int]) -> str:
@@ -29,12 +33,20 @@ def route_choice_text(route: Route) -> str:
     return f"Use Output {route.output_channel} → Input {route.input_channel}"
 
 
-def find_message(result: FindResult) -> str:
-    """What Find says about its result: the route, the other inputs that heard it, and clipping."""
+def find_message(result: FindResult, outputs: int | None = None, levels_locked: bool = False) -> str:
+    """What Find says about its result: the route, the other inputs that heard it, clipping, and an early stop."""
     route = result.route
+    if result.silent:
+        return FIND_SILENT_TEXT
     if route is None:
-        return several_routes_text() if result.state == "several" else FIND_NONE_TEXT
+        if result.state == "several":
+            return several_routes_text()
+        # Spec §4.3: once recording has started the levels stay fixed, so no hint to turn anything up.
+        return FIND_NONE_TEXT if levels_locked else FIND_NONE_TEXT + "\n" + FIND_QUIET_HINT
     lines = [f"Found: Output {route.output_channel} → Input {route.input_channel}."]
+    if result.stopped_early and outputs:
+        # Outputs after this one were not tried, so a timing cable on an earlier output could be the answer.
+        lines.append(f"{stopped_early_note(outputs)} Check that Output {route.output_channel} goes to the reamp box.")
     if route.other_inputs:
         heard = sorted((route.input_channel, *route.other_inputs))
         lines.append(f"Found on inputs {_and_list(heard)}. Using input {route.input_channel} (louder).")

@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QPushButton, QVBoxLayout
 from ...find_route import FindResult, Route
 from ...find_scan import ScanTarget, scan_target
 from ..copy import (
-    FIND_CANCELLED_TEXT, FIND_FAILED_TEXT, FIND_NONE_TEXT, find_message, loopback_note, route_choice_text,
+    FIND_CANCELLED_TEXT, FIND_FAILED_TEXT, find_message, loopback_note, route_choice_text,
     several_routes_text, stopped_early_note,
 )
 from ..widgets.common import button, label, set_style_property
@@ -152,11 +152,13 @@ class ConnectFindMixin:
         self.find_stop_note.setText(stopped_early_note(self._find_outputs) if result.stopped_early else "")
         self.find_stop_note.setVisible(result.stopped_early)
         if result.route is not None:
-            self._use_route(result.route)
-        elif result.state == "several":
-            self._show_find(several_routes_text(), "muted", routes=result.routes)
+            self._use_route(result.route, result.stopped_early)
+        elif result.state == "several":  # Try again and manual channels stay offered in case neither is right
+            self._show_find(several_routes_text(), "muted", routes=result.routes, retry=True)
         else:
-            self._show_find(FIND_NONE_TEXT, "warn", retry=True)
+            # After a passed level check, or once recording has started, the gain must not change.
+            locked = self._plan_locked() or self._route_fingerprint is not None
+            self._show_find(find_message(result, levels_locked=locked), "warn", retry=True)
         self._sync_states()
 
     def _on_find_failure(self, message: str) -> None:
@@ -166,14 +168,15 @@ class ConnectFindMixin:
     def _on_find_cancelled(self) -> None:
         self._show_find(FIND_CANCELLED_TEXT, "muted")
 
-    def _use_route(self, route: Route) -> None:
+    def _use_route(self, route: Route, stopped_early: bool = False) -> None:
         """Set and save the channels, then ask for a new level check: the old one was for another route."""
         self.output_channel_spin.setValue(route.output_channel)
         self.input_channel_spin.setValue(route.input_channel)
         self._save_audio_settings()
         self._route_fingerprint = None
         self._show_level(None)
-        self._show_find(find_message(FindResult("found", (route,), ())), "danger" if route.clipping else "ok")
+        message = find_message(FindResult("found", (route,), (), stopped_early), self._find_outputs)
+        self._show_find(message, "danger" if route.clipping else "warn" if stopped_early else "ok")
         self._sync_states()
 
     def _open_manual_channels(self) -> None:

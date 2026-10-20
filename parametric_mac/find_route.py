@@ -29,6 +29,15 @@ COARSE_CONTRAST = 5.0
 COARSE_MARGIN = 500
 # Samples searched on each side of the measured delay when testing for a loopback.
 ALIGN_SEARCH = 2
+# Samples on each side of each click that the loopback test compares. The clicks are single samples, so
+# a narrow window keeps channel noise from hiding a copy: at −20 dBFS a 24-bit dithered copy or one with
+# −120 dBFS noise stays under −80 dB; a 16-bit dithered copy (about −60 dB) does not.
+LOOPBACK_WINDOW = 16
+# Detection tries the return as recorded, then doubled: upstream's trigger is a fixed level, so a dark,
+# quiet path can sit under it while its clicks stand well above the noise. Doubling found the same
+# returns as −14 dBFS clicks would (final review probe), without playing louder. A fallback only: it runs
+# when the first try fails, and every click must still arrive.
+DETECTION_BOOSTS = (1.0, 2.0)
 _SILENCE = 1e-9
 
 FindState = Literal["found", "several", "none"]
@@ -67,6 +76,8 @@ class FindResult:
     routes: tuple[Route, ...]
     loopbacks: tuple[int, ...]
     stopped_early: bool = False
+    # Every input read exact digital zeros on every output: on macOS, no microphone access.
+    silent: bool = False
 
     @property
     def route(self) -> Route | None:
@@ -86,23 +97,29 @@ def _peak_dbfs(recording: np.ndarray) -> float | None:
     return 20 * math.log10(peak) if peak > _SILENCE else None
 
 
-def is_loopback(recording: np.ndarray, playback: np.ndarray, delay: int, section: int | None = None) -> bool:
+def is_loopback(recording: np.ndarray, playback: np.ndarray, delay: int, clicks: Sequence[int]) -> bool:
     """True when the return, aligned and gain-matched, differs from the playback by ≤ LOOPBACK_RESIDUAL_DB.
 
-    Upstream's delay estimate can sit a sample or two from the integer shift, so the best of the
-    nearby shifts decides.
+    Only the samples around each click count (LOOPBACK_WINDOW). Upstream's delay estimate can sit a
+    sample or two from the integer shift, so the best of the nearby shifts decides.
     """
-    return any(_residual_db(recording, playback, shift, section) <= LOOPBACK_RESIDUAL_DB
+    return any(_residual_db(recording, playback, shift, clicks) <= LOOPBACK_RESIDUAL_DB
                for shift in range(delay - ALIGN_SEARCH, delay + ALIGN_SEARCH + 1))
 
 
-def _residual_db(recording: np.ndarray, playback: np.ndarray, delay: int, section: int | None) -> float:
+def _windows(signal: np.ndarray, starts: Sequence[int]) -> np.ndarray | None:
+    span = 2 * LOOPBACK_WINDOW + 1
+    if any(start < 0 or start + span > len(signal) for start in starts):
+        return None
+    return np.concatenate([signal[start:start + span] for start in starts]).astype(np.float64)
+
+
+def _residual_db(recording: np.ndarray, playback: np.ndarray, delay: int, clicks: Sequence[int]) -> float:
     """Residual energy after gain matching, relative to the matched signal, in dB (+inf when undefined)."""
-    if delay < 0 or delay >= len(recording):
+    sent = _windows(playback, [c - LOOPBACK_WINDOW for c in clicks])
+    got = _windows(recording, [c + delay - LOOPBACK_WINDOW for c in clicks])
+    if sent is None or got is None:
         return math.inf
-    length = min(len(playback), len(recording) - delay, section or len(playback))
-    sent = np.asarray(playback[:length], dtype=np.float64)
-    got = np.asarray(recording[delay:delay + length], dtype=np.float64)
     energy = float(sent @ sent)
     if energy <= 0:
         return math.inf
@@ -121,18 +138,33 @@ def analyse_input(recording: np.ndarray, input_channel: int, playback: np.ndarra
     peak = _peak_dbfs(recording)
     if peak is None:
         return InputReturn(input_channel, False, None, None, False)
-    shift = coarse_shift(recording, preamble)
-    shifted = np.concatenate([recording[shift:], np.zeros(shift, dtype=np.float32)]) if shift else recording
+    # Upstream compares |x| with the background, so a DC offset hides an inverted click; the peak above
+    # stays the raw one, because clipping happens on the raw signal.
+    centred = recording - np.float32(np.median(recording))
+    for boost in DETECTION_BOOSTS:
+        found = _detect(centred * np.float32(boost), preamble)
+        if found is not None:
+            delay, arrival = found
+            loopback = is_loopback(centred, playback, arrival, preamble.blip_locations)
+            return InputReturn(input_channel, True, delay, peak, loopback)
+    return InputReturn(input_channel, False, None, peak, False)
+
+
+def _detect(centred: np.ndarray, preamble: PlayedPreamble) -> tuple[int, int] | None:
+    """(delay, arrival) when every click arrived and the clicks agree, else None."""
+    shift = coarse_shift(centred, preamble)
+    shifted = np.concatenate([centred[shift:], np.zeros(shift, dtype=np.float32)]) if shift else centred
     try:
         result = measure_delay(shifted, preamble)
     except ValueError:  # too short or unreadable: treat as no answer
-        return InputReturn(input_channel, False, None, peak, False)
-    if not result.ok or result.delay is None:
-        return InputReturn(input_channel, False, None, peak, False)
+        return None
+    # Upstream accepts one click alone (nothing to disagree with); a single pop must not become a route.
+    every_click = len(result.blip_delays) == len(preamble.blip_locations)
+    if not result.ok or result.delay is None or not every_click:
+        return None
     delay = int(result.delay) + shift
     # Upstream reports the averaged arrival minus a safety factor; the loopback test needs the arrival.
-    loopback = is_loopback(recording, playback, delay + int(result.safety_factor), preamble.n_samples)
-    return InputReturn(input_channel, True, delay, peak, loopback)
+    return delay, delay + int(result.safety_factor)
 
 
 def coarse_shift(recording: np.ndarray, preamble: PlayedPreamble) -> int:
@@ -165,6 +197,7 @@ def choose_route(scan: OutputScan, excluded_inputs: frozenset[int]) -> Route | N
     return Route(scan.output_channel, best.input_channel, best.peak_dbfs, tuple(r.input_channel for r in usable[1:]))
 
 
-def summarise(routes: Sequence[Route], loopbacks: Sequence[int], stopped_early: bool) -> FindResult:
+def summarise(routes: Sequence[Route], loopbacks: Sequence[int], stopped_early: bool,
+              silent: bool = False) -> FindResult:
     state: FindState = "none" if not routes else "found" if len(routes) == 1 else "several"
-    return FindResult(state, tuple(routes), tuple(sorted(set(loopbacks))), stopped_early)
+    return FindResult(state, tuple(routes), tuple(sorted(set(loopbacks))), stopped_early, silent and not routes)

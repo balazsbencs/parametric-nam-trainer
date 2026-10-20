@@ -157,3 +157,12 @@ def test_device_without_inputs_or_outputs_is_none(monkeypatch, outputs, inputs):
     calls = _fake_factory(monkeypatch, FakeRig(outputs=2, inputs=2))
     target = ScanTarget(0, outputs, inputs, RATE, 0, "low", frozenset())
     assert scan_target(target, None, None).state == "none" and calls == []
+
+
+def test_total_silence_on_every_input_is_reported_as_silent():
+    # macOS gives exact digital zeros when the app has no microphone access.
+    def silent(playback, sample_rate, output_channel):
+        return np.zeros((len(playback), 2), np.float32)
+    result = scan_outputs(silent, RATE, 2, frozenset())
+    assert result.state == "none" and result.silent
+    assert not scan_outputs(FakeRig(outputs=2, inputs=2, route=None), RATE, 2, frozenset()).silent
