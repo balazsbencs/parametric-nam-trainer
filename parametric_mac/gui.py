@@ -786,9 +786,10 @@ class MacWindow(MainWindow):
         advanced = QWidget()
         form = QFormLayout(advanced)
         self.device = QComboBox()
-        self.device.addItem("Automatic · Apple GPU when available", "auto")
+        self.device.addItem("Automatic · available GPU", "auto")
         self.device.addItem("Apple GPU · MPS", "mps")
         self.device.addItem("CPU", "cpu")
+        self.device.addItem("NVIDIA GPU · CUDA", "cuda")
         self.epochs = QSpinBox()
         self.epochs.setRange(1, 10000)
         self.epochs.setValue(200)
@@ -799,10 +800,29 @@ class MacWindow(MainWindow):
         for text, widget in (("Train on", self.device), ("Epochs", self.epochs), ("Batch size", self.batch)):
             widget.setAccessibleName(text)
             form.addRow(text, widget)
+        self.performance_mode = QComboBox()
+        self.performance_mode.addItem("Safe baseline", 'baseline')
+        self.performance_mode.addItem("Use measured recommendation", 'measured')
+        self.performance_mode.currentIndexChanged.connect(self._sync_states)
+        form.addRow("Performance", self.performance_mode)
+        self.learning_schedule = QComboBox()
+        self.learning_schedule.addItem("Original learning schedule", 'original')
+        self.learning_schedule.addItem("Reduce rate on validation plateau", 'plateau')
+        form.addRow("Learning rate", self.learning_schedule)
+        self.early_stopping = QSpinBox()
+        self.early_stopping.setRange(0, 1000)
+        self.early_stopping.setSpecialValueText("Disabled")
+        self.early_stopping.setSuffix(" checks without improvement")
+        form.addRow("Stop on plateau", self.early_stopping)
+        self.benchmark_button = button("Benchmark this device", lambda: self._start('tune'))
+        form.addRow(self.benchmark_button)
+        self.performance_hint = label("Benchmark one model size at a time. Short trials select speed settings; the trained model must still pass audio checks.", "muted")
+        form.addRow(self.performance_hint)
+        self._performance_report = None
         disclosure(options, "Advanced training settings", advanced)
         layout.addWidget(self.train_settings)
         layout.addWidget(label("Try a quick test first to check the complete workflow. It is not a finished model. "
-                               "Automatic uses the Apple GPU when available, otherwise CPU.", "muted"))
+                               "Automatic uses a supported GPU when available, otherwise CPU.", "muted"))
         row = QHBoxLayout()
         self.check_button = button("Check recordings", lambda: self._start("check"))
         self.train_button = button("Start training", lambda: self._start("train"), True)
@@ -1197,6 +1217,12 @@ class MacWindow(MainWindow):
         self.session = CaptureSession(project, self.project_dir)
         self._train_input_name, self._validation_input_name = project.train_input, project.validation_input
         self._workflow = read_state(directory)
+        saved_profile = self._workflow.get('performance_profile')
+        saved_path = self.project_dir / saved_profile if isinstance(saved_profile, str) else None
+        self._performance_report = saved_path if saved_path and saved_path.is_file() else None
+        self.performance_mode.setCurrentIndex(0)
+        self.performance_hint.setText('Saved recommendation available. Hardware and recordings are checked before training.' if self._performance_report else
+                                      'Benchmark this project and device to measure suitable settings. Audio qualification remains required.')
         mapping = self._workflow.get("playback_calibration", {})
         if (not isinstance(mapping, dict) or isinstance(mapping.get("input_pad_db", 0), bool)
                 or not isinstance(mapping.get("input_pad_db", 0), (int, float))
@@ -1438,6 +1464,10 @@ class MacWindow(MainWindow):
         self.capture_continue.setEnabled(complete)
         self.check_button.setEnabled(not busy and self.project_dir is not None)
         self.model_architecture.setEnabled(not busy)
+        for widget in (self.performance_mode, self.learning_schedule, self.early_stopping):
+            widget.setEnabled(not busy)
+        self.benchmark_button.setEnabled(not busy and self.project_dir is not None)
+        self.batch.setEnabled(not busy and self.performance_mode.currentData() != 'measured')
         self.record_reference_button.setEnabled(not busy and bool(self.project_dir))
         self.warm_start_button.setEnabled(not busy and bool(self.project_dir))
         self.clear_warm_start_button.setEnabled(not busy and bool(self.project_dir))
@@ -1451,7 +1481,7 @@ class MacWindow(MainWindow):
         self.stop_button.setEnabled(self.process is not None and not self.stopping)
         self.review_check.setEnabled(not busy and self._exported_run() is not None)
         self.save_model_button.setEnabled(not busy and self._exported_run() is not None)
-        self.activity_label.setText("Checking recordings…" if self.process and self.command == "check" else "Training in progress…" if self.process else "Audio operation running…" if self._worker else "No job running")
+        self.activity_label.setText("Checking recordings…" if self.process and self.command == "check" else "Benchmark in progress…" if self.process and self.command == "tune" else "Training in progress…" if self.process else "Audio operation running…" if self._worker else "No job running")
         if self.project and self.project.entries and not self._route_ready() and not busy:
             self.capture_hint.setText("Return to Connect: confirm the setup and pass Test connection before recording. "
                                       + f"Keep fixed: {self.fixed_notes.text()}")
@@ -1459,9 +1489,17 @@ class MacWindow(MainWindow):
     def _start(self, command):
         if self._busy() or self.project_dir is None:
             return
-        if command == "train" and self.project and (not self.project.entries or self.project.pending_entries()):
+        if command in ("train", "tune") and self.project and (not self.project.entries or self.project.pending_entries()):
             self.status_label.setText("Finish recording the plan before training.")
             return
+        if command == 'train' and self.performance_mode.currentData() == 'measured' and not self._performance_report:
+            self.status_label.setText('Benchmark this project and device before using a recommendation.')
+            return
+        if command == 'tune':
+            from .architectures import is_dual
+            if is_dual(self.model_architecture.currentData()):
+                self.status_label.setText('Choose Standard or Nano to benchmark one model size at a time.')
+                return
         self.stopping = False
         self.command = command
         self._run_folder = None
@@ -1484,7 +1522,15 @@ class MacWindow(MainWindow):
             args = ["-m", "parametric_mac", "qualify", str(self._run_folder), "--input-pad-db", str(self.playback_pad.value())]
         else:
             args = ["-m", "parametric_mac", command, str(self.project_dir), "--architecture", self.model_architecture.currentData()]
+        if command == 'tune':
+            args += ['--device', self.device.currentData()]
         if command == "train":
+            if self.performance_mode.currentData() == 'measured':
+                args += ['--performance-profile', str(self._performance_report)]
+            if self.learning_schedule.currentData() != 'original':
+                args += ['--scheduler', self.learning_schedule.currentData()]
+            if self.early_stopping.value():
+                args += ['--early-stopping-patience', str(self.early_stopping.value())]
             args += ["--device", self.device.currentData(), "--epochs", str(self.epochs.value()), "--batch", str(self.batch.value())]
             if self.playback_confirm.isChecked():
                 args += ["--input-pad-db", str(self.playback_pad.value())]
@@ -1492,8 +1538,8 @@ class MacWindow(MainWindow):
         process.readyReadStandardOutput.connect(self._read_log)
         process.finished.connect(self._finished)
         process.errorOccurred.connect(self._process_error)
-        self.stop_button.setText("Stop check" if command in ("check", "qualify") else "Stop training")
-        self.status_label.setText("Checking playback model…" if command == "qualify" else "Checking recordings…" if command == "check" else "Checking recordings and preparing training…")
+        self.stop_button.setText("Stop benchmark" if command == 'tune' else "Stop check" if command in ("check", "qualify") else "Stop training")
+        self.status_label.setText("Benchmarking this device…" if command == "tune" else "Checking playback model…" if command == "qualify" else "Checking recordings…" if command == "check" else "Checking recordings and preparing training…")
         self.train_log.appendPlainText(f"\n{command.capitalize()}: {self.project_dir}\n")
         self._sync_states()
         process.start(sys.executable, args)
@@ -1511,6 +1557,10 @@ class MacWindow(MainWindow):
         lines = self._log_buffer.split("\n")
         self._log_buffer = lines.pop()
         for line in lines:
+            if self.command == 'tune' and line.startswith('Performance report: '):
+                self._performance_report = Path(line.removeprefix('Performance report: ').strip())
+            if self.command == 'tune' and line.startswith('Benchmark trial '):
+                self.status_label.setText(line.split(':', 1)[0] + ' in progress…')
             if line.startswith("Run folder: "):
                 self._run_folder = Path(line.removeprefix("Run folder: ").strip())
             match = re.search(r"Epoch (\d+)/(\d+) started", line)
@@ -1528,6 +1578,14 @@ class MacWindow(MainWindow):
         elif code == 0:
             self.status_label.setText("Recordings passed the checks. You can start training." if self.command == "check" else "Job finished. Open Review for playback qualification and listening.")
             self.train_progress.setValue(100)
+            if self.command == 'tune' and self._performance_report:
+                report = read_json(self._performance_report)
+                self._workflow['performance_profile'] = str(self._performance_report)
+                write_state(self.project_dir, self._workflow)
+                self.batch.setValue(report['recommended_batch'])
+                self.performance_mode.setCurrentIndex(1)
+                self.performance_hint.setText(f"Measured batch {report['recommended_batch']}; recommendation selected. Full audio and transient qualification is still required.")
+                self.status_label.setText('Benchmark finished. Measured settings will be checked against this project and hardware before training.')
         else:
             self.status_label.setText("Playback checks failed. Open Review for details; recordings and checkpoints are preserved." if self.command == "qualify" else
                                       "Job failed. Your recordings are preserved. Open Training log and errors; for GPU or memory errors, retry on CPU.")
@@ -1556,6 +1614,7 @@ class MacWindow(MainWindow):
     def _retry_cpu(self):
         self.device.setCurrentIndex(self.device.findData("cpu"))
         self.batch.setValue(1)
+        self.performance_mode.setCurrentIndex(0)
         self._start("train")
 
     def _stop(self):

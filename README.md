@@ -288,3 +288,50 @@ The same frozen trainer and qualification code can run headlessly on CUDA. See
 benchmarking, checkpoint resume and qualified collection, and
 [docs/transient-validation.md](docs/transient-validation.md) for the Bassman
 regression evidence and remaining validation limits.
+
+### Measure training performance on your device
+
+In **Train → Advanced training settings**, choose a single model size and click
+**Benchmark this device**. It runs bounded disposable trials on sampled real
+recordings and selects a measured recommendation. The safe baseline remains
+available. A recommendation controls batch size, training window, loader workers,
+and supported CUDA precision/compilation; it must match this device, PyTorch,
+model/loss configuration, starting NAM and recording hashes before training starts.
+
+```sh
+.venv/bin/parametric tune PROJECT --device auto --architecture a2-standard
+# Supply the Performance report path printed by the command:
+.venv/bin/parametric train PROJECT --architecture a2-standard \
+  --performance-profile PROJECT/performance/TUNE_FOLDER/benchmark.json
+```
+
+By default, tuning tests batches 4/8/16/32, then a doubled training window and two
+persistent loader workers; CUDA can also test compilation and BF16. It stops at
+eight trials. Each trial has two warmup batches, four measured batches, and a
+180-second timeout; `--batches`, `--steps`, `--warmup`, `--timeout` and
+`--max-trials` bound the CLI experiment. Trials use identical initial weights and
+seeded sampled captures, the real optimizer/loss (including enabled anchors), and
+isolated processes. A failed or out-of-memory trial cannot become a recommendation.
+Stopping the benchmark also stops its worker process group.
+
+The report records audio seconds processed per wall-clock second, first-step
+latency, total process time and peak CUDA allocation. Measured batch intervals
+include data-loader/transfer overhead. Run on an otherwise idle device for a
+useful comparison. Compilation startup is excluded from steady throughput but
+included in first-step/process time. These short measurements are noisy and do
+not establish time to convergence. **Throughput recommendations are provisional;
+ordinary audio and reserved transient qualification remain mandatory.** Tuning
+never publishes a model, and its updates do not change the source NAM.
+
+CPU and MPS profiles retain FP32 eager execution. CUDA profiles can opt into
+`--precision bf16-mixed` and `--compile`; unsupported choices fail visibly.
+`--workers 0` remains the baseline; larger worker counts use spawn, persistent
+workers and bounded prefetching. `--ny` changes training windows only, with full
+preflight repeated for the new size. Validation windows remain unchanged.
+
+Optional `--scheduler plateau` lowers the learning rate after five validation
+checks without improvement. `--early-stopping-patience N` enables stopping after N
+checks without improvement; zero keeps it disabled. Both are also available in
+Advanced training settings. They are separate choices from throughput tuning.
+Larger batches do not trigger an automatic learning-rate increase. All effective
+settings are snapshotted in each run; model topology and export format stay the same.

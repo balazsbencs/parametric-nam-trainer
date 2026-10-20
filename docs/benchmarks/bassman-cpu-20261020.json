@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "hardware": {
+    "device": "cpu",
+    "machine": "x86_64",
+    "system": "Linux",
+    "torch": "2.14.1+cpu",
+    "threads": 2,
+    "processor": "",
+    "platform": "Linux-6.12.94+deb13-amd64-x86_64-with-glibc2.41"
+  },
+  "context": "737c1345a32e0fd3cb61e9502d107e717380444b2aef1e6367980fc904083d67",
+  "prepared_run": "local disposable benchmark preparation",
+  "trials": [
+    {
+      "passed": true,
+      "audio_seconds_per_second": 0.3252525493113588,
+      "seconds_per_step": 0.5247204580809921,
+      "first_step_seconds": 0.7638809010386467,
+      "measured_steps": 4,
+      "batch": 1,
+      "settings": {
+        "precision": "32-true",
+        "workers": 0,
+        "ny": null,
+        "compile": false,
+        "scheduler": "original",
+        "early_stopping_patience": 0
+      },
+      "frames_scored": 32768,
+      "peak_cuda_memory_bytes": null,
+      "trial_wall_seconds": 4.014153263531625,
+      "process_wall_seconds": 10.746998517774045
+    },
+    {
+      "passed": true,
+      "audio_seconds_per_second": 0.9358356774455726,
+      "seconds_per_step": 0.7294727943371981,
+      "first_step_seconds": 0.9264152459800243,
+      "measured_steps": 4,
+      "batch": 4,
+      "settings": {
+        "precision": "32-true",
+        "workers": 0,
+        "ny": null,
+        "compile": false,
+        "scheduler": "original",
+        "early_stopping_patience": 0
+      },
+      "frames_scored": 131072,
+      "peak_cuda_memory_bytes": null,
+      "trial_wall_seconds": 5.149373349733651,
+      "process_wall_seconds": 11.857233243994415
+    },
+    {
+      "passed": true,
+      "audio_seconds_per_second": 1.2923347069518127,
+      "seconds_per_step": 1.056485851528123,
+      "first_step_seconds": 1.2621956681832671,
+      "measured_steps": 4,
+      "batch": 8,
+      "settings": {
+        "precision": "32-true",
+        "workers": 0,
+        "ny": null,
+        "compile": false,
+        "scheduler": "original",
+        "early_stopping_patience": 0
+      },
+      "frames_scored": 262144,
+      "peak_cuda_memory_bytes": null,
+      "trial_wall_seconds": 6.979080339893699,
+      "process_wall_seconds": 13.663763501681387
+    },
+    {
+      "passed": true,
+      "audio_seconds_per_second": 1.3298055285020083,
+      "seconds_per_step": 1.957178407581523,
+      "first_step_seconds": 2.101478725671768,
+      "measured_steps": 4,
+      "batch": 16,
+      "settings": {
+        "precision": "32-true",
+        "workers": 0,
+        "ny": null,
+        "compile": false,
+        "scheduler": "original",
+        "early_stopping_patience": 0
+      },
+      "frames_scored": 499712,
+      "peak_cuda_memory_bytes": null,
+      "trial_wall_seconds": 12.168712330982089,
+      "process_wall_seconds": 19.087588022463024
+    },
+    {
+      "passed": true,
+      "audio_seconds_per_second": 1.856561959683815,
+      "seconds_per_step": 2.252191644627601,
+      "first_step_seconds": 3.754382680170238,
+      "measured_steps": 4,
+      "batch": 16,
+      "settings": {
+        "precision": "32-true",
+        "workers": 0,
+        "ny": 16384,
+        "compile": false,
+        "scheduler": "original",
+        "early_stopping_patience": 0
+      },
+      "frames_scored": 802816,
+      "peak_cuda_memory_bytes": null,
+      "trial_wall_seconds": 16.081544016487896,
+      "process_wall_seconds": 22.926381926052272
+    },
+    {
+      "passed": true,
+      "audio_seconds_per_second": 1.855126066264056,
+      "seconds_per_step": 2.2539348723366857,
+      "first_step_seconds": 9.397706917487085,
+      "measured_steps": 4,
+      "batch": 16,
+      "settings": {
+        "precision": "32-true",
+        "workers": 2,
+        "ny": 16384,
+        "compile": false,
+        "scheduler": "original",
+        "early_stopping_patience": 0
+      },
+      "frames_scored": 802816,
+      "peak_cuda_memory_bytes": null,
+      "trial_wall_seconds": 23.009646606631577,
+      "process_wall_seconds": 29.899431889876723
+    }
+  ],
+  "recommended": {
+    "precision": "32-true",
+    "workers": 0,
+    "ny": 16384,
+    "compile": false,
+    "scheduler": "original",
+    "early_stopping_patience": 0
+  },
+  "status": "complete",
+  "quality_status": "provisional throughput recommendation; full audio/transient qualification remains required",
+  "method": "Same initial model and seeded sampled captures; real losses/optimizer/loader; warmup excluded from throughput, included in trial wall time.",
+  "recommended_batch": 16,
+  "starting_model_sha256": "c0028731afa974afd8ec3df58cb98b8fc33280a9a85f4483f29ae0bb9e0bafbc"
+}

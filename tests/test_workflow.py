@@ -78,6 +78,7 @@ def test_rejects_bad_control_and_delay(project):
 
 def test_mac_profile_keeps_model_learning_choices():
     original = {'trainer': {'strategy': 'ddp', 'gradient_clip_val': 0.5},
+                'trainer_fit_kwargs': {'ckpt_path': '/another-machine/old.ckpt'},
                 'train_dataloader': {'persistent_workers': True, 'prefetch_factor': 4}}
     result = mac_learning_config(original, 'mps', 1, 4)
     assert result['trainer']['gradient_clip_val'] == 0.5
@@ -85,6 +86,7 @@ def test_mac_profile_keeps_model_learning_choices():
     assert result['torch_compile']['enabled'] is False
     assert result['train_dataloader']['drop_last'] is False
     assert 'strategy' not in result['trainer']
+    assert 'ckpt_path' not in result['trainer_fit_kwargs']
     assert 'prefetch_factor' not in result['train_dataloader']
     assert 'strategy' in original['trainer']
 

@@ -73,13 +73,29 @@ def main(argv=None):
     check.add_argument("--architecture", choices=tuple(ARCHITECTURES))
     train = sub.add_parser("train", help="Train a concat or FiLM A2 model from a capture project")
     train.add_argument("project", type=Path)
-    train.add_argument("--device", choices=("auto", "mps", "cpu"), default="auto")
+    train.add_argument("--device", choices=("auto", "mps", "cpu", "cuda"), default="auto")
     train.add_argument("--epochs", type=int, default=200)
     train.add_argument("--batch", type=int, default=4)
     train.add_argument("--dry-run", action="store_true")
     train.add_argument("--input-pad-db", type=float, help="Confirm playback-to-capture input attenuation (0–30 dB); use 12 only for a dataset captured in that digital domain")
     train.add_argument("--architecture", choices=tuple(ARCHITECTURES), help="a2-* uses concat; film-* uses FiLM (continuous controls only); *-dual trains Standard + Nano into one file; auto preserves the recipe")
     train.add_argument('--warm-start', type=Path, help='Fine-tune a matching raw NAM while retaining original recording units')
+    train.add_argument('--precision', choices=('32-true', 'bf16-mixed'), default=None)
+    train.add_argument('--workers', type=int, default=None)
+    train.add_argument('--ny', type=int, default=None, help='Training output samples per window; validation windows stay unchanged')
+    train.add_argument('--compile', action='store_true', default=None, dest='compiled', help='Opt-in CUDA compilation')
+    train.add_argument('--scheduler', choices=('original', 'plateau'), default=None)
+    train.add_argument('--early-stopping-patience', type=int, default=None)
+    train.add_argument('--performance-profile', type=Path, help='Use a recommendation measured on these recordings and hardware')
+    tune = sub.add_parser('tune', help='Benchmark bounded disposable training trials; never exports a playback model')
+    tune.add_argument('project', type=Path)
+    tune.add_argument('--device', choices=('auto','mps','cpu','cuda'), default='auto')
+    tune.add_argument('--architecture', choices=tuple(ARCHITECTURES))
+    tune.add_argument('--batches', nargs='+', type=int, default=[4,8,16,32])
+    tune.add_argument('--steps', type=int, default=4)
+    tune.add_argument('--warmup', type=int, default=2)
+    tune.add_argument('--timeout', type=int, default=180)
+    tune.add_argument('--max-trials', type=int, default=8)
     reference = sub.add_parser('input-reference', help='Record measured digital gains or analog full-scale levels for automatic fixed playback calibration')
     reference.add_argument('project', type=Path)
     reference.add_argument('--kind', choices=('digital', 'analog'), default='digital')
@@ -103,7 +119,14 @@ def main(argv=None):
             return 0 if report.ok else 1
         elif args.command == "train":
             from .training import run_training
-            run_training(args.project, args.device, args.epochs, args.batch, args.dry_run, args.architecture, args.input_pad_db, args.warm_start)
+            performance = {key: value for key, value in {
+                'precision':args.precision, 'workers':args.workers, 'ny':args.ny, 'compile':args.compiled,
+                'scheduler':args.scheduler, 'early_stopping_patience':args.early_stopping_patience}.items() if value is not None}
+            run_training(args.project, args.device, args.epochs, args.batch, args.dry_run, args.architecture,
+                         args.input_pad_db, args.warm_start, performance, args.performance_profile)
+        elif args.command == 'tune':
+            from .benchmark import tune
+            tune(args.project, args.device, args.architecture, args.batches, args.steps, args.warmup, args.timeout, args.max_trials)
         elif args.command == 'input-reference':
             from .input_reference import record_reference, resolve_reference
             from .transients import project_data
