@@ -38,10 +38,10 @@ The optional reference route uses INST 2 at low gain. A line output may overload
 1. Disconnect speakers from OUTPUT L/R. They are now capture sends. Close DAWs or disable all software input monitoring.
 2. Turn **DIRECT MONITOR off**. Returning captured audio to a reamp send can create feedback. The headphone output shares the playback mix; it is not a spare independent capture output.
 3. Start with OUTPUT, reamp level and input gains low. Leave phantom power off for this direct pedal setup. Connect the pedal's correct supply.
-4. In macOS Audio MIDI Setup, select the UMC22 and use 48 kHz for input/output. Use the format the device exposes; writing a 24-bit WAV does not increase the interface's converter resolution.
+4. The UMC22 appears as **USB Audio CODEC (Core Audio) · 2 in · 2 out** in Connect. macOS can expose its input and output as two devices; the app pairs them, so no Aggregate Device is needed. In Audio MIDI Setup, select each **USB Audio CODEC** half and set both to 48 kHz. Use the format the device exposes; writing a 24-bit WAV does not increase the interface's converter resolution.
 5. Grant microphone permission to Terminal/Python/the app that launches capture if macOS asks. Device naming may be generic USB audio, so identify the UMC22 by unplugging and reconnecting if needed.
 6. Before Find, bring OUTPUT, the reamp level and the INST 1 gain up from minimum to a moderate setting: Find plays quiet clicks, and a dark or quiet pedal at minimum gain may not return them. In **Connect**, select the UMC22 and click **Find my connection**. It should find Output 1 → Input 1. If the optional loopback cable is plugged in and **Use the optional timing loopback** is off, Find shows two connections: choose **Use Output 1 → Input 1**. To set the channels by hand, open **Expert settings**: main send/return = channel 1, optional loopback send/return = channel 2. Channels in the app are numbered from one. Start with a 512-frame buffer; increase it if dropouts occur.
-7. Run **Test connection** before recording training examples. Verify a clean return, a clean reference if enabled, and a detected timing signal. Software cannot turn DIRECT MONITOR off for you.
+7. Run **Check level** before recording training examples. Verify a clean return, a clean reference if enabled, and a detected timing signal. Software cannot turn DIRECT MONITOR off for you.
 
 ## Set levels once
 

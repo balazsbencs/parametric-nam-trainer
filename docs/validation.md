@@ -77,3 +77,36 @@ The Mac field-sizing problem in the user's screenshot was traced to platform def
 
 
 The October 14 visual refinement bundles the approved Inter face as static Regular, Medium and SemiBold instances, with no runtime font download or fontTools dependency. Packaging checks confirm font, license and vector assets are present in the built wheel. Qt controls retain their input and accessibility semantics while their chrome, field grouping, disclosure arrows, physical diagrams and training presets match the mockups. Profile selection still changes the original duration combo, including actual epoch counts, and cannot deselect the active preset. Native tests now cover a real failed check job opening the error disclosure in its checked state and the first click collapsing it. Disabled profile styling and failure disclosure geometry were reviewed in actual rendered states.
+
+
+## Split interfaces on Connect — 2026-10-20
+
+Implemented on `plan/split-interfaces` (PR #7), stacked on Find my connection (PR #6).
+The full suite passed **282 tests**, with **1 macOS-only smoke test skipped** and ten upstream
+Lightning deprecation warnings, in **498.73 seconds** on Linux/Python 3.13/PySide6 6.12.
+`capture_cards.py` and the testable part of `device_rates.py` both have **100% coverage**;
+only the native CoreAudio adapter calls are excluded.
+The pure device-list tests cover duplex and split cards, ambiguous names, separate host APIs,
+Bluetooth exclusion, stable ordering and upstream recording resolving each direction by name.
+Offscreen GUI tests cover saving the selected card, a missing or ambiguous saved card without
+rewriting the project, restoration on refresh, per-half rate blocks, and Find resolving changed
+indexes before a scan. The optional timing loopback stays off for new projects even before a
+card has been selected. No upstream files or runtime dependencies changed.
+
+CoreAudio's stream-scope walk and transport decoding have an injected-backend test; its native
+smoke test is skipped on Linux. Native calls still need macOS qualification. The Linux test
+runtime required Tk libraries extracted under `/tmp` because the pinned trainer imports Tk.
+The bundled-font assertion accepts Linux's additional weight-family aliases while still checking
+the expected family and actual regular/medium/semibold styles.
+
+`render_native.py --connect-only` produced 16 offscreen screenshots, in dark and light at
+1140×900 and 800×680. They include the selected split card and a simulated Find result of
+Output 1 → Input 1. The rate label reserves its text width; the compact mismatched-rate state
+has a geometry assertion. `connect-evidence.json` records that no audio was recorded and no
+model was trained for these screenshots. The design detector reported no findings on the
+changed Connect modules.
+
+**Hardware check pending:** on the Mac, plug in the UMC22 without an Aggregate Device. Confirm
+**USB Audio CODEC (Core Audio) · 2 in · 2 out**, Find returning **Output 1 → Input 1**, a passed
+**Check level**, and one recorded take without dropouts. Record the outcome here; automated
+and offscreen tests do not establish those hardware results.

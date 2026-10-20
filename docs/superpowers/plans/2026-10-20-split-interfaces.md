@@ -1,6 +1,6 @@
 # Split Interfaces on Connect Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Connect lists an interface that macOS shows as two one-direction devices with one name (for example the UMC22, "USB Audio CODEC") as one sound card, and everything after the choice works as now.
 
@@ -53,7 +53,7 @@
   - `capture_cards(devices: Sequence[DeviceInfo], transports: Mapping[tuple[str, str], str] | None = None) -> CardList` — cards keep PortAudio's order (by the lower index of the pair). `transports` maps `(name, "input"|"output")` to a CoreAudio transport fourcc (Task 2 reads it); a split pair is dropped (not ambiguous, just not listed) when either half is `"blue"` or `"blea"`; unknown transports keep the normal rule.
   - `card_label(card: CaptureCard) -> str` → "{name} ({host_api}) · {n} in · {m} out".
 
-- [ ] **Step 1: Write the failing tests** (build `nam.capture.audio.DeviceInfo` values by hand):
+- [x] **Step 1: Write the failing tests** (build `nam.capture.audio.DeviceInfo` values by hand):
 
 ```python
 def test_duplex_device_is_one_card(): ...                       # BlackHole 2ch 2/2 → split False, same index both ways
@@ -76,10 +76,10 @@ def test_recording_resolves_each_half(monkeypatch, tmp_path):   # Review Focus 4
     assert session._resolve_devices() == {"output_device": 2, "input_device": 3}
 ```
 
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement.** Group devices by `(name, host_api)`; per group count input-capable and output-capable devices (a duplex device counts in both); a group is usable only when each count is exactly 1.
-- [ ] **Step 4: Run, expect PASS**; coverage ≥ 80%.
-- [ ] **Step 5: Commit** — `feat: pair one-direction devices into capture cards`
+- [x] **Step 2: Run, expect FAIL.**
+- [x] **Step 3: Implement.** Group devices by `(name, host_api)`; per group count input-capable and output-capable devices (a duplex device counts in both); a group is usable only when each count is exactly 1.
+- [x] **Step 4: Run, expect PASS**; coverage ≥ 80%.
+- [x] **Step 5: Commit** — `feat: pair one-direction devices into capture cards`
 
 ---
 
@@ -100,15 +100,15 @@ def test_recording_resolves_each_half(monkeypatch, tmp_path):   # Review Focus 4
   - `copy.card_rate_message(input_rate: int | None, output_rate: int | None, file_rate: int | None) -> str | None` — `None` when every known rate equals `file_rate`; else the window D text for the first wrong half (input first). Duplex cards pass the same rate twice and keep the existing `sample_rate_message` wording ("Your sound card runs at …").
   - `copy.card_rate_label(input_rate: int | None, output_rate: int | None) -> str` — "48 kHz" when equal, "in 44.1 kHz · out 48 kHz" when not, "" when unknown.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `card_rates` uses live values per direction, falls back per half, returns `None` for ASIO.
   - `card_rate_message(44100, 48000, 48000)` == "The input of your sound card runs at 44.1 kHz. Set it to 48 kHz in Audio MIDI Setup, then check again."; `(48000, 44100, 48000)` names "output"; `(48000, 48000, 48000)` is `None`; a duplex card at 44.1 kHz keeps today's text.
   - `card_rate_label` cases above.
   - On macOS, `live_half_rates()` and `live_half_transports()` return dicts whose keys are `(str, "input"|"output")` tuples (smoke test; skip off macOS).
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement.** Keep the `ctypes` code in one function under 50 lines by reusing small helpers; mark only the CoreAudio calls `# pragma: no cover - needs CoreAudio`.
-- [ ] **Step 4: Run, expect PASS.**
-- [ ] **Step 5: Commit** — `feat: read the sample rate of each half of a sound card`
+- [x] **Step 2: Run, expect FAIL.**
+- [x] **Step 3: Implement.** Keep the `ctypes` code in one function under 50 lines by reusing small helpers; mark only the CoreAudio calls `# pragma: no cover - needs CoreAudio`.
+- [x] **Step 4: Run, expect PASS.**
+- [x] **Step 5: Commit** — `feat: read the sample rate of each half of a sound card`
 
 ---
 
@@ -134,7 +134,7 @@ def test_recording_resolves_each_half(monkeypatch, tmp_path):   # Review Focus 4
   - Window E: `_has_device()` is false, so Find, Check level and Next stay off (existing rules); choosing a card clears `_missing_card` and saves.
   - Window D: the existing rate rule (`_rate_problem`) uses `card_rate_message`, so Find, Check level and Next stay off.
 
-- [ ] **Step 1: Write the failing tests** (`run_gui`; stub `nam.capture.gui.main._list_devices` — or the method that fills `self._devices` — to return fixed `DeviceInfo` lists; stub `live_half_rates`):
+- [x] **Step 1: Write the failing tests** (`run_gui`; stub `nam.capture.gui.main._list_devices` — or the method that fills `self._devices` — to return fixed `DeviceInfo` lists; stub `live_half_rates`):
   - A: devices = BlackHole (duplex), "USB Audio CODEC" out-half 2 + in-half 3, MacBook Pro Microphone (in only) → the list holds exactly two entries, "BlackHole 2ch (Core Audio) · 2 in · 2 out" and "USB Audio CODEC (Core Audio) · 2 in · 2 out"; choosing the codec saves `input_device == output_device == "USB Audio CODEC"`.
   - A2 (only a split interface): devices = the two codec halves, MacBook Pro Microphone and MacBook Pro Speakers → the codec is the only entry and `no_devices_label` is hidden.
   - C: two identical codec pairs → no codec entry; `card_notice` has the window C text with the name; BlackHole chosen, wire check on → `find_button` enabled.
@@ -142,10 +142,10 @@ def test_recording_resolves_each_half(monkeypatch, tmp_path):   # Review Focus 4
   - E (Review Focus 2, 5): a project saved with "USB Audio CODEC", reopened with only BlackHole present → `device_combo.currentIndex() == -1`, the window E text, Find off, and the project file still names "USB Audio CODEC"; refresh with the codec back → selected, notice gone.
   - E after twins: same project, two identical codec pairs present → window E state (plus the window C notice).
   - Help text contains the new line.
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement** to match windows A, C, D and E of `connect.png`.
-- [ ] **Step 4: Run the full suite → PASS.**
-- [ ] **Step 5: Commit** — `feat: list split interfaces as one sound card on Connect`
+- [x] **Step 2: Run, expect FAIL.**
+- [x] **Step 3: Implement** to match windows A, C, D and E of `connect.png`.
+- [x] **Step 4: Run the full suite → PASS.**
+- [x] **Step 5: Commit** — `feat: list split interfaces as one sound card on Connect`
 
 ---
 
@@ -163,15 +163,15 @@ def test_recording_resolves_each_half(monkeypatch, tmp_path):   # Review Focus 4
   - `scan_target` passes both indexes.
   - `_find_target()` resolves both indexes **fresh** with `find_device(card.name, kind=…, host_api=card.host_api)`; if either lookup fails, or `capture_cards(list_devices())` no longer lists that name, it returns `None` and Find shows `FIND_FAILED_TEXT` with **Try again** (no scan starts).
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_scan_target_passes_the_device_values_in_order` (Phase 2) updated: `ScanTarget(3, 2, 2, 2, RATE, 256, "low", frozenset())` → the factory receives `(3, 2, 2, 2, 256, "low", cancel)`.
   - Review Focus 1: the card in the combo holds `input_index=3, output_index=2`, but the stubbed fresh device table now has the halves at 5 and 4 → the recorded `ScanTarget` has `(5, 4)`; with the halves gone → no scan, the failure text.
   - Window B: a split card chosen, a found result → "Found: Output 1 → Input 1." as before.
   - Update the Phase 2 `tests/test_ui_find.py` `SETUP` (and the second fake device in its device-change block): it adds `DeviceInfo` values straight to `device_combo`, which the fresh lookup cannot find. Stub the device table instead and let the combo fill from it; assert on `target.input_index` / `target.output_index` where it asserted `device_index`.
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run the full suite → PASS.**
-- [ ] **Step 5: Commit** — `feat: find the connection on a split interface`
+- [x] **Step 2: Run, expect FAIL.**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run the full suite → PASS.**
+- [x] **Step 5: Commit** — `feat: find the connection on a split interface`
 
 ---
 
@@ -180,9 +180,9 @@ def test_recording_resolves_each_half(monkeypatch, tmp_path):   # Review Focus 4
 **Files:**
 - Modify: `scripts/render_native.py` (its stub sound card becomes a `CaptureCard`; add a `connect-split` shot of window A's list state), `README.md` (troubleshooting row: "Your interface is missing from the list"), `docs/hardware-umc22.md` (the UMC22 appears as "USB Audio CODEC"; no Aggregate Device), `docs/validation.md` (dated entry), `docs/screenshots/native/`.
 
-- [ ] **Step 1:** Update `render_native.py`; render offscreen; compare Connect with windows A and B in both themes.
-- [ ] **Step 2:** Update the docs.
-- [ ] **Step 3:** Full suite → PASS. Commit — `docs: describe split interfaces on Connect`
+- [x] **Step 1:** Update `render_native.py`; render offscreen; compare Connect with windows A and B in both themes.
+- [x] **Step 2:** Update the docs.
+- [x] **Step 3:** Full suite → PASS. Commit — `docs: describe split interfaces on Connect`
 - [ ] **Step 4 (the user, with hardware):** UMC22 plugged in, no Aggregate Device: it appears as "USB Audio CODEC (Core Audio) · 2 in · 2 out"; Find returns Output 1 → Input 1; the level check passes; one take records with no dropout. Write the result in `docs/validation.md`.
 
 ---
@@ -191,3 +191,21 @@ def test_recording_resolves_each_half(monkeypatch, tmp_path):   # Review Focus 4
 
 - **Spec coverage:** §4.1 pairing and uniqueness → Task 1; §4.2 list and counts → Tasks 1, 3; §4.3 saving, reopening, missing card → Tasks 1 (recording resolution), 3; §4.4 per-half rates → Tasks 2–3; §4.5 Find → Task 4; §4.6 help and docs → Tasks 3, 5; §6 verification → Tasks 1–5.
 - **Interfaces:** Task 4 renames Phase 2's `ScanTarget.device_index`; every Phase 2 caller (`scan_target`, `_find_target`, tests, `render_native.py`) is listed in Tasks 4–5.
+
+
+## Implementation status — 2026-10-20
+
+Tasks 1–4 landed together in `96f13a9` (`feat: support split sound cards on Connect and Find`),
+so the capture-card item data and both Find device indexes change atomically. The planned
+individual feature commits above are consolidated into that commit. Tests are in
+`test_capture_cards.py`, `test_device_rates.py` (including the copy cases), `test_ui_cards.py`
+(including fresh Find resolution), and the updated existing Connect/Find tests.
+
+Full-suite gate: **282 passed, 1 skipped** (macOS CoreAudio smoke), ten upstream Lightning
+warnings. Both new core modules have **100% coverage** of testable code. The CoreAudio walk
+also runs against an injected backend; native adapter calls still require the Mac. The
+Linux font test accepts the expected family among Fontconfig's additional weight aliases.
+
+Task 5's software steps are complete: documentation, a Connect-only renderer and 16 native
+screenshots, including split selection and a simulated Find result in both themes/sizes.
+The remaining hardware step is deliberately unchecked and recorded in `docs/validation.md`.
