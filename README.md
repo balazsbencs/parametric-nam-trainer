@@ -291,6 +291,18 @@ regression evidence and remaining validation limits.
 
 ### Measure training performance on your device
 
+For a portable Standard/Nano **training-duration estimate** on a Mac M2 or Runpod,
+see [cloud/benchmark/README.md](cloud/benchmark/README.md). Its self-contained
+packages include the Bassman fitting recordings and measure training and epoch
+validation separately, then estimate 50/100/200 epochs and both sizes sequentially.
+They export timing reports without producing playable models. Rebuild matching
+archives from a local dataset with:
+
+```sh
+python cloud/benchmark/build_packages.py --trainer . --upstream .upstream \
+  --dataset /path/to/bassman-project --output /path/to/packages
+```
+
 In **Train → Advanced training settings**, choose a single model size and click
 **Benchmark this device**. It runs bounded disposable trials on sampled real
 recordings and selects a measured recommendation. The safe baseline remains
