@@ -6,8 +6,49 @@ from dataclasses import dataclass
 from typing import Literal
 
 from ..find_route import CLIP_DBFS as ROUTE_CLIP_DBFS  # one clip rule; the UI imports the core
+from ..find_route import FindResult, Route
 
 CLIP_TEXT = "The signal is too close to clipping. Turn the reamp box or the sound card input down a little, then check again."
+
+# Find my connection, spec §4.2 and §6.1, verbatim.
+FIND_NONE_TEXT = "No signal came back. Check the cables, and check that the reamp box and the pedal have power."
+FIND_FAILED_TEXT = "The sound card stopped during the search. Check that nothing else uses it, then try again."
+FIND_CANCELLED_TEXT = "Search cancelled."
+
+
+def _and_list(numbers: Sequence[int]) -> str:
+    words = [str(n) for n in numbers]
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def several_routes_text() -> str:
+    return "More than one connection answered. Choose the one that goes through the reamp box and your gear."
+
+
+def route_choice_text(route: Route) -> str:
+    return f"Use Output {route.output_channel} → Input {route.input_channel}"
+
+
+def find_message(result: FindResult) -> str:
+    """What Find says about its result: the route, the other inputs that heard it, and clipping."""
+    route = result.route
+    if route is None:
+        return several_routes_text() if result.state == "several" else FIND_NONE_TEXT
+    lines = [f"Found: Output {route.output_channel} → Input {route.input_channel}."]
+    if route.other_inputs:
+        heard = sorted((route.input_channel, *route.other_inputs))
+        lines.append(f"Found on inputs {_and_list(heard)}. Using input {route.input_channel} (louder).")
+    if route.clipping:
+        lines.append(CLIP_TEXT)
+    return "\n".join(lines)
+
+
+def loopback_note(inputs: Sequence[int]) -> str:
+    return "\n".join(f"Input {n} looks like a loopback — ignored" for n in inputs)
+
+
+def stopped_early_note(outputs: int) -> str:
+    return f"Stopped at the first answer: this sound card has {outputs} outputs."
 
 
 def _khz(rate: int) -> str:

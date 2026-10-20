@@ -121,7 +121,7 @@ class ShellMixin:
 
     def _wire_signals(self):
         self._mutating = [self.new_button, self.open_button, self.new_action, self.open_action, self.pedal_name,
-                          self.device_combo, self.wire_check,
+                          self.device_combo, self.wire_check, self.find_button,
                           self.gear_next_button, self.gear_change_link, self.gear_new_link,
                           self.control_editor, self.gear_kind, self.fixed_notes, self.audio_controls,
                           self.route_test_button, self.plan_advanced, *self.quality_cards, *self.more_level_buttons,

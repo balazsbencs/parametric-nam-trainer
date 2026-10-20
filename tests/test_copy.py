@@ -76,3 +76,28 @@ def test_metric_lines_keep_the_honest_wording():
     assert tiers[1] == "Nano: no validation ESR recorded"
     assert metric_lines({}) == ("No validation metric recorded for this run. Inspect training.log for details.",)
     assert CHECKPOINT_NOTE == "These settings also chose the best training round, so the match can look better than on new settings."
+
+
+def test_find_messages_are_the_spec_copy():
+    from parametric_mac.find_route import FindResult, Route
+    from parametric_mac.ui.copy import (
+        CLIP_TEXT, find_message, loopback_note, route_choice_text, several_routes_text, stopped_early_note,
+    )
+    found = FindResult("found", (Route(2, 1, -18.0, ()),), ())
+    assert find_message(found) == "Found: Output 2 → Input 1."
+    two = FindResult("found", (Route(2, 1, -18.0, (2,)),), ())
+    assert find_message(two) == "Found: Output 2 → Input 1.\nFound on inputs 1 and 2. Using input 1 (louder)."
+    three = FindResult("found", (Route(2, 3, -18.0, (4, 1)),), ())
+    assert "Found on inputs 1, 3 and 4. Using input 3 (louder)." in find_message(three)
+    none = FindResult("none", (), (3,))
+    assert find_message(none) == ("No signal came back. Check the cables, and check that the reamp box and "
+                                  "the pedal have power.")
+    clipping = FindResult("found", (Route(2, 1, -0.5, ()),), ())
+    assert find_message(clipping) == "Found: Output 2 → Input 1.\n" + CLIP_TEXT
+    several = FindResult("several", (Route(2, 1, -18.0, ()), Route(3, 4, -30.0, ())), ())
+    assert find_message(several) == several_routes_text() == (
+        "More than one connection answered. Choose the one that goes through the reamp box and your gear.")
+    assert route_choice_text(Route(3, 4, -30.0, ())) == "Use Output 3 → Input 4"
+    assert loopback_note((3, 5)) == "Input 3 looks like a loopback — ignored\nInput 5 looks like a loopback — ignored"
+    assert loopback_note(()) == ""
+    assert stopped_early_note(12) == "Stopped at the first answer: this sound card has 12 outputs."
