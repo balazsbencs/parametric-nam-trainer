@@ -62,7 +62,7 @@ def main():
         write("vendor/NAM-LICENSE", (upstream / "LICENSE").read_bytes())
         if args.dataset.is_dir():
             for path in sorted(args.dataset.rglob('*')):
-                if path.is_file() and 'outputs' not in path.relative_to(args.dataset).parts:
+                if path.is_file() and path.suffix != '.f32' and 'outputs' not in path.relative_to(args.dataset).parts:
                     write('project/' + path.relative_to(args.dataset).as_posix(), path.read_bytes())
         else:
             with ZipFile(args.dataset) as dataset:
