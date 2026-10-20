@@ -52,6 +52,10 @@ class MacWindow(ShellMixin, ProjectMixin, JobsMixin, StartPageMixin, GearPageMix
         self.setMinimumSize(760, 580)
         self._ready = True
         self._applying = False
+        # No card is selected at startup, so the save guard intentionally does nothing.
+        # Seed new projects with Console's optional loopback off as well as its checkbox.
+        self._audio_settings.loopback_output_channel = None
+        self._audio_settings.loopback_input_channel = None
         self.loopback_check.setChecked(False)
         self._mirror_controls()
         self._apply_quality(2)

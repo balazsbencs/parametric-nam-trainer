@@ -12,10 +12,15 @@ from nam.capture.audio import AudioDropoutError, CaptureCancelled, DeviceInfo
 from parametric_mac.find_route import FindResult, Route
 from parametric_mac.find_scan import ScanTarget
 from parametric_mac.ui.copy import CLIP_TEXT
+import nam.capture.audio as audio
+from parametric_mac import device_rates
+devices = [DeviceInfo(5, "Test interface", "Core Audio", 4, 4, 48000.0)]
+upstream._list_devices = lambda **kw: devices
+audio.list_devices = lambda **kw: devices
+device_rates.live_half_rates = lambda: {}
+device_rates.live_half_transports = lambda: {}
 from parametric_mac.gui import MacWindow
 window = MacWindow(); window.resize(1140, 900); window.show()
-window._has_device = lambda: True; window._device_sample_rate = lambda: 48000
-window.device_combo.addItem("Test interface", DeviceInfo(5, "Test interface", "Core Audio", 4, 4, 48000.0))
 window.device_combo.setCurrentIndex(window.device_combo.count() - 1)
 window.go_to_step("connect"); app.processEvents()
 
@@ -61,15 +66,16 @@ assert not window.output_channel_spin.isVisible()
 assert not window.find_button.isEnabled()
 window.wire_check.setChecked(True); app.processEvents()
 assert window.find_button.isEnabled() and window.find_button.text() == "Find my connection"
-window._device_sample_rate = lambda: 44100; window._file_sample_rate = lambda: 48000; window._sync_states()
+device_rates.live_half_rates = lambda: {("Test interface", "input"): 44100, ("Test interface", "output"): 44100}
+window._file_sample_rate = lambda: 48000; window._sync_states()
 assert not window.find_button.isEnabled()
-window._device_sample_rate = lambda: 48000; window._sync_states()
+device_rates.live_half_rates = lambda: {}; window._sync_states()
 
 # Found: channels set and saved, level check cleared, loopback listed in Expert settings.
 set_channels(1, 2); window._show_level(-9.0); window._route_fingerprint = "old"
 found = FindResult("found", (Route(2, 1, -18.0, ()),), (3,))
 targets = run_find(lambda target, progress, cancel: found)
-assert (targets[0].device_index, targets[0].output_channels, targets[0].input_channels) == (5, 4, 4)
+assert (targets[0].input_index, targets[0].output_index, targets[0].output_channels, targets[0].input_channels) == (5, 5, 4, 4)
 assert targets[0].sample_rate == 48000 and targets[0].excluded_inputs == frozenset()
 assert channels() == (2, 1) and saved() == (2, 1)
 assert window.find_result.text().startswith("Found: Output 2 → Input 1."), window.find_result.text()
@@ -149,7 +155,8 @@ assert not window.find_stop_note.isHidden()
 # Another sound card: the old result and its route links no longer apply.
 run_find(lambda target, progress, cancel: several)
 assert not window.find_route_links.isHidden()
-window.device_combo.addItem("Other interface", DeviceInfo(6, "Other interface", "Core Audio", 2, 2, 48000.0))
+devices.append(DeviceInfo(6, "Other interface", "Core Audio", 2, 2, 48000.0))
+window._refresh_devices()
 window.device_combo.setCurrentIndex(window.device_combo.count() - 1); app.processEvents()
 assert window.find_route_links.isHidden() and window.find_result.text() == "", window.find_result.text()
 assert window.find_stop_note.isHidden()

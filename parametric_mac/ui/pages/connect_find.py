@@ -4,6 +4,10 @@ import logging
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
+from nam.capture import audio
+
+from ...capture_cards import capture_cards
+from ...device_rates import live_half_transports
 from ...find_route import FindResult, Route
 from ...find_scan import ScanTarget, scan_target
 from ..copy import (
@@ -111,10 +115,22 @@ class ConnectFindMixin:
         device = self.device_combo.currentData()
         if device is None:
             return None
-        rate = self._device_sample_rate() or int(round(device.default_samplerate))
+        try:
+            cards = capture_cards(audio.list_devices(), live_half_transports()).cards
+            card = next((c for c in cards if (c.name, c.host_api) == (device.name, device.host_api)), None)
+            if card is None:
+                return None
+            source = audio.find_device(card.name, kind="input", host_api=card.host_api)
+            sink = audio.find_device(card.name, kind="output", host_api=card.host_api)
+            if (source.index, sink.index) != (card.input_index, card.output_index):
+                return None
+        except Exception:
+            log.debug("Could not resolve Find's sound card", exc_info=True)
+            return None
+        rate = self._device_sample_rate() or int(round(card.default_samplerate))
         excluded = (frozenset({self.loopback_input_channel_spin.value()}) if self.loopback_check.isChecked()
                     else frozenset())
-        return ScanTarget(device.index, device.max_output_channels, device.max_input_channels, rate,
+        return ScanTarget(source.index, sink.index, card.max_output_channels, card.max_input_channels, rate,
                           int(self.buffer_size_combo.currentData()), self.latency_combo.currentData(), excluded)
 
     def _scan_outputs(self, target: ScanTarget, progress, cancel) -> FindResult:
@@ -126,6 +142,7 @@ class ConnectFindMixin:
             return
         target = self._find_target()
         if target is None:
+            self._show_find(FIND_FAILED_TEXT, "warn", retry=True)
             return
         self._finding, self._find_outputs = True, target.output_channels
         self._show_find(SEARCHING_TEXT, "muted")

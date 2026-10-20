@@ -12,10 +12,14 @@ inputs = Path(tempfile.mkdtemp())
 for name in ("inputTrunc.wav", "validation.wav"):
     sf.write(inputs / name, np.zeros(4800, dtype=np.float32), 48000)
 project_io.FILES = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs.iterdir()}
+import nam.capture.gui.main as upstream
+from nam.capture.audio import DeviceInfo
+upstream._list_devices = lambda **kw: [DeviceInfo(0, "Test interface", "Core Audio", 4, 4, 48000)]
+from parametric_mac import device_rates
+device_rates.live_half_rates = lambda: {}
 from parametric_mac.gui import MacWindow
 window = MacWindow(); window._inputs_dir = inputs
-window._has_device = lambda: True
-window._device_sample_rate = lambda: 48000
+window.device_combo.setCurrentIndex(0)
 window.resize(1140, 900); window.show(); app.processEvents()
 window._start_new_capture(); window.gear_next_button.click(); app.processEvents()
 assert window.current_step() == "connect"
@@ -46,10 +50,11 @@ assert not window.connect_button.isEnabled()
 # A wrong sample rate blocks and offers Audio MIDI Setup.
 window.input_channel_spin.setValue(window.input_channel_spin.value() - 1)
 window._on_route_test_success(route(-9.0))
-window._device_sample_rate = lambda: 44100; window._sync_states(); app.processEvents()
+device_rates.live_half_rates = lambda: {("Test interface", "input"): 44100, ("Test interface", "output"): 44100}
+window._sync_states(); app.processEvents()
 assert not window.connect_button.isEnabled()
 assert "44.1 kHz" in window.sample_rate_message_label.text() and window.audio_midi_button.isVisible()
-window._device_sample_rate = lambda: 48000; window._sync_states()
+device_rates.live_half_rates = lambda: {}; window._sync_states()
 
 # Reopen: checkbox off, level cleared, not ready.
 folder = window.project_dir

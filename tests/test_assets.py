@@ -50,7 +50,8 @@ app = QApplication([])
 assert install_typography() == "Geist"
 for name in FONT_FILES:
     families = QFontDatabase.applicationFontFamilies(QFontDatabase.addApplicationFont(str(ASSETS / name)))
-    assert families == (["Geist Mono"] if name.startswith("GeistMono") else ["Geist"]), (name, families)
+    # Fontconfig on Linux can also expose the font's weight-specific family alias.
+    assert ("Geist Mono" if name.startswith("GeistMono") else "Geist") in families, (name, families)
 assert {"Regular", "Medium", "SemiBold"} <= set(QFontDatabase.styles("Geist")), QFontDatabase.styles("Geist")
 assert {"Regular", "Medium"} <= set(QFontDatabase.styles(MONO_FAMILY)), QFontDatabase.styles(MONO_FAMILY)
 assert QFontInfo(app.font()).family() == "Geist", QFontInfo(app.font()).family()

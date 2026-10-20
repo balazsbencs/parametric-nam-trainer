@@ -147,15 +147,15 @@ def _fake_factory(monkeypatch, rig):
 def test_scan_target_passes_the_device_values_in_order(monkeypatch):
     calls = _fake_factory(monkeypatch, FakeRig(outputs=6, inputs=2, route=(2, 1)))
     cancel = lambda: False  # noqa: E731
-    result = scan_target(ScanTarget(7, 6, 2, RATE, 256, "low", frozenset()), None, cancel)
-    assert calls == [(7, 6, 2, 256, "low", cancel)]
+    result = scan_target(ScanTarget(3, 2, 6, 2, RATE, 256, "low", frozenset()), None, cancel)
+    assert calls == [(3, 2, 6, 2, 256, "low", cancel)]
     assert (result.state, result.route.output_channel, result.route.input_channel) == ("found", 2, 1)
 
 
 @pytest.mark.parametrize("outputs, inputs", [(0, 2), (2, 0)])
 def test_device_without_inputs_or_outputs_is_none(monkeypatch, outputs, inputs):
     calls = _fake_factory(monkeypatch, FakeRig(outputs=2, inputs=2))
-    target = ScanTarget(0, outputs, inputs, RATE, 0, "low", frozenset())
+    target = ScanTarget(0, 0, outputs, inputs, RATE, 0, "low", frozenset())
     assert scan_target(target, None, None).state == "none" and calls == []
 
 

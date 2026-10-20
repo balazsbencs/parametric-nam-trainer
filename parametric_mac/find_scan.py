@@ -25,7 +25,8 @@ POLL_MS = 50
 @dataclass(frozen=True)
 class ScanTarget:
     """Plain values read on the GUI thread, so the scan never touches Qt or CoreAudio."""
-    device_index: int
+    input_index: int
+    output_index: int
     output_channels: int
     input_channels: int
     sample_rate: int
@@ -43,7 +44,7 @@ def playback_frame(playback: np.ndarray, output_channels: int, output_channel: i
     return frame
 
 
-def sounddevice_play_record(device_index: int, output_channels: int, input_channels: int, blocksize: int,
+def sounddevice_play_record(input_index: int, output_index: int, output_channels: int, input_channels: int, blocksize: int,
                             latency, cancel: Cancel | None = None) -> PlayRecord:  # pragma: no cover - needs a sound card
     """The same full-width `sd.playrec` call as upstream `SounddeviceRecorder.playrec`, keeping every input."""
     def play_record(playback: np.ndarray, sample_rate: int, output_channel: int) -> np.ndarray:
@@ -51,7 +52,7 @@ def sounddevice_play_record(device_index: int, output_channels: int, input_chann
 
         recording = sd.playrec(
             playback_frame(playback, output_channels, output_channel), samplerate=sample_rate,
-            device=(device_index, device_index), channels=input_channels, dtype="float32",
+            device=(input_index, output_index), channels=input_channels, dtype="float32",
             blocksize=blocksize, latency=latency, blocking=False,
         )
         try:
@@ -122,7 +123,7 @@ def scan_target(target: ScanTarget, progress: Progress | None, cancel: Cancel | 
     if target.output_channels < 1 or target.input_channels < 1:
         return summarise([], [], False)
     play_record = sounddevice_play_record(
-        target.device_index, target.output_channels, target.input_channels, target.blocksize, target.latency, cancel,
+        target.input_index, target.output_index, target.output_channels, target.input_channels, target.blocksize, target.latency, cancel,
     )
     return scan_outputs(play_record, target.sample_rate, target.output_channels, target.excluded_inputs,
                         progress, cancel, target.input_channels)
