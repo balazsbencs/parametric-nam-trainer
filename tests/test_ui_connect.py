@@ -20,6 +20,9 @@ window.input_channel_spin.setRange(1, 8)  # The mocked sound card has multiple i
 window.resize(1140, 900); window.show(); app.processEvents()
 window._start_new_capture(); window.gear_next_button.click(); app.processEvents()
 assert window.current_step() == "connect"
+# Find is the main path; the channel numbers sit under Expert settings.
+assert window.card_stage.title.text() == "Find the connection" and window.find_button.isVisible()
+assert window.audio_advanced.isAncestorOf(window.input_channel_spin) and not window.input_channel_spin.isVisible()
 route = lambda peak: SimpleNamespace(ok=True, loopback_failed=False, loopback_used=False, loopback_disagreement=False,
                                      crosscheck=None, peak=peak, latency=SimpleNamespace(delay=17, peak_delay=17.0))
 
@@ -118,7 +121,8 @@ assert window.no_devices_label.styleSheet() == ""
 
 job = QProcess(); job.start(sys.executable, ["-c", "import time; time.sleep(5)"]); assert job.waitForStarted(5000)
 window.process = job; window._sync_states(); app.processEvents()
-for widget in (window.device_combo, window.wire_check, window.output_channel_spin, window.check_level_button):
+for widget in (window.device_combo, window.wire_check, window.output_channel_spin, window.check_level_button,
+               window.find_button):
     assert not widget.isEnabled(), widget
 job.kill(); job.waitForFinished(3000); window.process = None
 print("OK")
