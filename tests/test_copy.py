@@ -91,7 +91,15 @@ def test_find_messages_are_the_spec_copy():
     assert "Found on inputs 1, 3 and 4. Using input 3 (louder)." in find_message(three)
     none = FindResult("none", (), (3,))
     assert find_message(none) == ("No signal came back. Check the cables, and check that the reamp box and "
-                                  "the pedal have power.")
+                                  "the pedal have power.\nIf your gear is quiet or dark, turn its volume or the "
+                                  "sound card input gain up a little, then try again.")
+    silent = FindResult("none", (), (), silent=True)
+    assert find_message(silent) == ("Every input recorded total silence. Allow microphone access for the app that "
+                                    "opened Parametric (usually Terminal or Python) in System Settings › Privacy & "
+                                    "Security › Microphone, then try again.")
+    # Spec §4.3: once recording has started the levels stay fixed, so no hint to turn anything up.
+    assert find_message(none, levels_locked=True) == ("No signal came back. Check the cables, and check that the "
+                                                      "reamp box and the pedal have power.")
     clipping = FindResult("found", (Route(2, 1, -0.5, ()),), ())
     assert find_message(clipping) == "Found: Output 2 → Input 1.\n" + CLIP_TEXT
     several = FindResult("several", (Route(2, 1, -18.0, ()), Route(3, 4, -30.0, ())), ())
@@ -101,3 +109,6 @@ def test_find_messages_are_the_spec_copy():
     assert loopback_note((3, 5)) == "Input 3 looks like a loopback — ignored\nInput 5 looks like a loopback — ignored"
     assert loopback_note(()) == ""
     assert stopped_early_note(12) == "Stopped at the first answer: this sound card has 12 outputs."
+    early = FindResult("found", (Route(2, 1, -18.0, ()),), (), True)
+    assert find_message(early, 12) == ("Found: Output 2 → Input 1.\nStopped at the first answer: this sound card "
+                                       "has 12 outputs. Check that Output 2 goes to the reamp box.")
