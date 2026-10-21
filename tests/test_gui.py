@@ -5,6 +5,8 @@ import sys
 from test_workflow import project
 
 SCRIPT = '''
+from parametric_mac import device_rates
+device_rates._live_halves = lambda: []
 import sys, hashlib, shutil, json
 from types import SimpleNamespace
 from pathlib import Path

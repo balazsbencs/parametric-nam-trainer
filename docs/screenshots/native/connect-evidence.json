@@ -1,0 +1,22 @@
+{
+  "files": [
+    "docs/screenshots/native/connect-not-ready-dark-desktop.png",
+    "docs/screenshots/native/connect-not-ready-dark-compact.png",
+    "docs/screenshots/native/connect-not-ready-light-desktop.png",
+    "docs/screenshots/native/connect-not-ready-light-compact.png",
+    "docs/screenshots/native/connect-split-dark-desktop.png",
+    "docs/screenshots/native/connect-split-dark-compact.png",
+    "docs/screenshots/native/connect-split-light-desktop.png",
+    "docs/screenshots/native/connect-split-light-compact.png",
+    "docs/screenshots/native/connect-split-found-dark-desktop.png",
+    "docs/screenshots/native/connect-split-found-dark-compact.png",
+    "docs/screenshots/native/connect-split-found-light-desktop.png",
+    "docs/screenshots/native/connect-split-found-light-compact.png",
+    "docs/screenshots/native/connect-ready-dark-desktop.png",
+    "docs/screenshots/native/connect-ready-dark-compact.png",
+    "docs/screenshots/native/connect-ready-light-desktop.png",
+    "docs/screenshots/native/connect-ready-light-compact.png"
+  ],
+  "audio_recorded": false,
+  "model_trained": false
+}
