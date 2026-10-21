@@ -1,4 +1,4 @@
-"""Connect page: wire it up, choose the sound card and channels, check the loudest level."""
+"""Connect page: wire it up, find the connection, check the loudest level."""
 from PySide6.QtCore import QProcess, Qt
 from PySide6.QtWidgets import QCheckBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
 from nam.capture.gui.main import read_wav_rate
@@ -6,6 +6,7 @@ from nam.capture.gui.main import read_wav_rate
 from ..copy import CONNECT_HELP, level_message, sample_rate_message
 from ..widgets.common import PAGE_MARGIN, PageScroll, button, disclosure, field, label, set_style_property, themed
 from ..widgets.meters import CableChain, LevelMeter
+from .connect_find import ConnectFindMixin
 
 WIRE_TEXT = "Monitoring is off and speakers are unplugged from the sound card"
 AMP_WARNING = "Never connect the amp's speaker output to the sound card. Use a load box."
@@ -42,7 +43,7 @@ class Stage(QFrame):
         set_style_property(self, "done", done)
 
 
-class ConnectPageMixin:
+class ConnectPageMixin(ConnectFindMixin):
     def _connect_page(self):
         self._level_state = None
         scroll = PageScroll()
@@ -64,6 +65,8 @@ class ConnectPageMixin:
             layout.addWidget(stage)
         columns.addWidget(main, 3)
         columns.addWidget(self._connect_aside(), 2)
+        # A Find result belongs to one sound card; built here, after the Expert notes exist.
+        self.device_combo.currentIndexChanged.connect(lambda *_: self._reset_find())
         scroll.setWidget(content)
         self.pages.addWidget(scroll)
         self.connect_button = button("Next: Record →", lambda: self.go_to_step("record"), True)
@@ -81,7 +84,7 @@ class ConnectPageMixin:
         return stage
 
     def _card_stage(self) -> Stage:
-        stage = Stage(2, "Choose the sound card and channels")
+        stage = Stage(2, "Find the connection")
         row = QHBoxLayout()
         row.addWidget(self.device_combo, 1)
         self.refresh_devices_button = QToolButton()
@@ -104,12 +107,7 @@ class ConnectPageMixin:
         stage.body.addWidget(self.sample_rate_message_label)
         self.audio_midi_button.hide()
         stage.body.addWidget(self.audio_midi_button, 0, Qt.AlignLeft)
-        self.audio_controls = QWidget()
-        channels = QHBoxLayout(self.audio_controls)
-        channels.setContentsMargins(0, 0, 0, 0)
-        channels.addWidget(field("Output channel (where the cable to the reamp box starts)", self.output_channel_spin), 1)
-        channels.addWidget(field("Input channel (where the cable from the gear comes back)", self.input_channel_spin), 1)
-        stage.body.addWidget(self.audio_controls)
+        self._find_rows(stage.body)
         self.sample_rate_warning_label.hide()
         # Any route change makes the last level check stale: re-evaluate readiness at once.
         for spin in (self.output_channel_spin, self.input_channel_spin):
@@ -160,6 +158,14 @@ class ConnectPageMixin:
     def _connect_expert(self, layout) -> None:
         advanced = QWidget()
         extra = QFormLayout(advanced)
+        # The channel numbers, for people who set them by hand; Find sets them on the main path.
+        self.audio_controls = QWidget()
+        channels = QVBoxLayout(self.audio_controls)
+        channels.setContentsMargins(0, 0, 0, 0)
+        channels.addWidget(field("Output channel (where the cable to the reamp box starts)", self.output_channel_spin))
+        channels.addWidget(field("Input channel (where the cable from the gear comes back)", self.input_channel_spin))
+        extra.addRow(self.audio_controls)
+        self._find_expert_notes(extra)
         self.loopback_check.setText("Use the optional timing loopback")
         extra.addRow(self.loopback_check)
         extra.addRow(label("A second cable from another output to another input, with low gain, measures timing.", "muted"))
@@ -218,6 +224,7 @@ class ConnectPageMixin:
         self.card_stage.set_done(self._has_device() and problem is None)
         self.level_stage.set_done(self._connect_ready())
         self.level_new_capture.setVisible(self._level_state == "clip" and self._plan_locked())
+        self._sync_find()
 
     def _show_level(self, peak: float | None) -> None:
         self.level_meter.set_peak(peak)
@@ -234,6 +241,7 @@ class ConnectPageMixin:
         self.wire_check.setChecked(False)
         self._route_fingerprint = None
         self._show_level(None)
+        self._reset_find()
 
     def _open_audio_midi_setup(self) -> None:
         if not QProcess.startDetached("open", ["-a", "Audio MIDI Setup"]):

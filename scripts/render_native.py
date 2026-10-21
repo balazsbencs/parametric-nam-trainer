@@ -27,6 +27,9 @@ import soundfile as sf
 from PySide6.QtCore import QProcess
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
+from nam.capture.audio import DeviceInfo
+
+from parametric_mac.find_route import FindResult, Route
 
 ROOT = Path(__file__).resolve().parents[1]
 SIZES = (("desktop", (1140, 900)), ("compact", (800, 680)))
@@ -95,8 +98,25 @@ def build_window(inputs: Path):
     window._has_device = lambda: True
     window._device_sample_rate = lambda: 48000
     window._current_sample_rate_warnings = lambda: []
+    # The same sound card on every Mac, so the images never show this machine's devices.
+    device = DeviceInfo(0, "Scarlett 2i2", "Core Audio", 2, 2, 48000.0)
+    window.device_combo.clear()
+    window.device_combo.addItem(upstream.format_device_label(device), device)
     window.show()
     return window
+
+
+def find_route(window) -> None:
+    """Run Find with a stubbed scan that answers on Output 1 → Input 1; nothing is played."""
+    found = FindResult("found", (Route(1, 1, -16.0, ()),), ())
+    window._scan_outputs = lambda target, progress, cancel: found
+    window.find_button.click()
+    for _ in range(250):
+        if window._worker is None:
+            break
+        QTest.qWait(20)
+    if not window.find_result.text().startswith("Found:"):
+        raise RuntimeError(f"Find did not run: {window.find_result.text()!r}")
 
 
 def render_setup(r: Renderer) -> None:
@@ -109,6 +129,7 @@ def render_setup(r: Renderer) -> None:
     w.gear_next_button.click()
     r.shoot("connect-not-ready")
     w.wire_check.setChecked(True)
+    find_route(w)
     w._on_route_test_success(ROUTE_OK)
     r.shoot("connect-ready")
 
