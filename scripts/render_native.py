@@ -64,7 +64,7 @@ def add_run(window) -> None:
     (run / "model_parametric.nam").write_text("{}")
     (run / "playback").mkdir(exist_ok=True)
     (run / "playback/model_playback.nam").write_text("{}")
-    (run / "playback/qualification.json").write_text(json.dumps({"passed": True, "model_sha256": hashlib.sha256((run / "playback/model_playback.nam").read_bytes()).hexdigest()}))
+    (run / "playback/qualification.json").write_text(json.dumps({"passed": True, "policy": {"version": 3}, "transients": {"passed": True}, "model_sha256": hashlib.sha256((run / "playback/model_playback.nam").read_bytes()).hexdigest()}))
 
 
 class Renderer:

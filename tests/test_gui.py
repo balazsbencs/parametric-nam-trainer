@@ -177,7 +177,7 @@ assert window.playback_pad.value() == 12 and window.playback_confirm.isChecked()
 
 (run / "playback").mkdir(exist_ok=True)
 (run / "playback/model_playback.nam").write_text("{}")
-(run / "playback/qualification.json").write_text(json.dumps({"passed": True, "model_sha256": hashlib.sha256((run / "playback/model_playback.nam").read_bytes()).hexdigest()}))
+(run / "playback/qualification.json").write_text(json.dumps({"passed": True, "policy": {"version": 3}, "transients": {"passed": True}, "model_sha256": hashlib.sha256((run / "playback/model_playback.nam").read_bytes()).hexdigest()}))
 window._show_run()
 assert window.save_model_button.isEnabled()
 (run / 'playback/model_playback.nam').write_text('{"changed":true}')
