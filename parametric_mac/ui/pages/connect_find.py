@@ -29,6 +29,7 @@ def link(text: str, callback) -> QPushButton:
 
 class ConnectFindMixin:
     _finding = False
+    _find_cancel_requested = False
     _find_outputs = 0
 
     # ---- widgets ----------------------------------------------------------------------
@@ -104,6 +105,7 @@ class ConnectFindMixin:
         if not self._finding:
             self._start_find()
         elif self._cancel_token is not None:
+            self._find_cancel_requested = True
             self._cancel_token.cancel()
 
     def _find_target(self) -> ScanTarget | None:
@@ -127,6 +129,7 @@ class ConnectFindMixin:
         target = self._find_target()
         if target is None:
             return
+        self._find_cancel_requested = False
         self._finding, self._find_outputs = True, target.output_channels
         self._show_find(SEARCHING_TEXT, "muted")
         self.route_test_progress.setValue(0)
@@ -147,6 +150,10 @@ class ConnectFindMixin:
         self.route_test_progress.hide()
 
     def _on_find_success(self, result: FindResult) -> None:
+        if self._find_cancel_requested:
+            self._on_find_cancelled()
+            self._sync_states()
+            return
         self.find_loopback_note.setText(loopback_note(result.loopbacks))
         self.find_loopback_note.setVisible(bool(result.loopbacks))
         self.find_stop_note.setText(stopped_early_note(self._find_outputs) if result.stopped_early else "")
