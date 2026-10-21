@@ -20,10 +20,12 @@ def select_device(requested="auto"):
     mps = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
     if requested == "mps" and not mps:
         raise ValueError("MPS is unavailable. Use CPU or native arm64 Python on an Apple Silicon Mac.")
+    if requested == "cuda" and not torch.cuda.is_available():
+        raise ValueError('CUDA is unavailable; choose an available device explicitly')
     if requested == "auto":
-        return "mps" if mps else "cpu"
-    if requested not in ("mps", "cpu"):
-        raise ValueError("Choose auto, mps, or cpu.")
+        return 'cuda' if torch.cuda.is_available() else "mps" if mps else "cpu"
+    if requested not in ("mps", "cpu", "cuda"):
+        raise ValueError("Choose auto, mps, cuda, or cpu.")
     return requested
 
 
@@ -33,10 +35,11 @@ def mac_learning_config(original, device, epochs=200, batch=4):
     config = copy.deepcopy(original)
     config["torch_compile"] = {"enabled": False}
     trainer = config.setdefault("trainer", {})
-    trainer.update(accelerator=device, devices=1, precision="32-true", benchmark=False,
+    trainer.update(accelerator="gpu" if device == "cuda" else device, devices=1, precision="32-true", benchmark=False,
                    max_epochs=epochs, enable_progress_bar=False, log_every_n_steps=1)
     # Do not inherit multi-device strategies or resume arguments from other machines.
     trainer.pop("strategy", None)
+    config.setdefault("trainer_fit_kwargs", {}).pop("ckpt_path", None)
     for name in ("train_dataloader", "val_dataloader"):
         loader = config.setdefault(name, {})
         loader.update(batch_size=batch, num_workers=0, pin_memory=False)
@@ -47,7 +50,7 @@ def mac_learning_config(original, device, epochs=200, batch=4):
     return config
 
 
-def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None, input_pad_db=None, warm_start=None):
+def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None, input_pad_db=None, warm_start=None, performance=None, performance_profile=None):
     directory = Path(directory).expanduser().resolve()
     state = read_state(directory)
     calibration = copy.deepcopy(state.get("playback_calibration", {}))
@@ -94,13 +97,25 @@ def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None
             raise ValueError('Choose a single matching tier for raw NAM fine-tuning')
         from .warm_start import prepare
         model, data, warm = prepare(Path(warm_start), model, data)
+    from . import performance as tuning
+    selected = select_device(device)
+    baseline_data, baseline_model = copy.deepcopy((data, model))
+    recommendation = None
+    if performance_profile is not None:
+        overrides = performance or {}
+        if set(overrides)-{'scheduler', 'early_stopping_patience'}:
+            raise ValueError('A saved recommendation controls precision, workers, windows and compilation; only learning schedule/stopping can be overridden')
+        performance, recommendation = tuning.recommended(performance_profile, selected)
+        performance.update(overrides)
+        batch = recommendation['recommended_batch']
+    settings = tuning.options(performance, selected)
+    learning = mac_learning_config(learning, selected, epochs, batch)
+    data, model, learning = tuning.configure(data, model, learning, settings, selected)
     report = check_project(directory, data, model)
     if not report.ok:
         raise ValueError(report.text())
     if model["net"]["name"] not in ("ConcatWaveNet", FILM_FACTORY):
         raise ValueError("This workflow supports concat and FiLM A2 models.")
-    selected = select_device(device)
-    learning = mac_learning_config(learning, selected, epochs, batch)
     data = absolute_data(data, directory)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = directory / "outputs" / f"{stamp}-{uuid.uuid4().hex[:8]}"
@@ -143,6 +158,8 @@ def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None
         for row in transients['validation']:
             merged = {**transients.get('common', {}), **row}
             paths.update(merged[k] for k in ('x_path', 'y_path'))
+    manifest['performance'] = settings
+    manifest['hardware'] = tuning.hardware(selected)
     manifest["audio_sha256"] = {}
     for path in sorted(paths):
         digest = hashlib.sha256()
@@ -150,6 +167,11 @@ def prepare_run(directory, device="auto", epochs=200, batch=4, architecture=None
             while chunk := source.read(1024 * 1024):
                 digest.update(chunk)
         manifest["audio_sha256"][path] = digest.hexdigest()
+    manifest['performance_context'] = tuning.context(baseline_model, baseline_data, manifest)
+    if recommendation is not None and recommendation.get('context') != manifest['performance_context']:
+        raise ValueError('Benchmark recommendation does not match the recordings, model, losses or starting weights; benchmark this project again')
+    if recommendation is not None:
+        manifest['performance_profile'] = str(Path(performance_profile).resolve())
     for name, value in (("data", data), ("model", model), ("learning", learning), ("manifest", manifest)):
         (out / f"{name}.json").write_text(json.dumps(value, indent=2) + "\n")
     if is_dual(architecture):
@@ -182,12 +204,12 @@ def finish_exports(out):
         atomic_write_json(path, model)
 
 
-def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False, architecture=None, input_pad_db=None, warm_start=None):
+def run_training(directory, device="auto", epochs=200, batch=4, dry_run=False, architecture=None, input_pad_db=None, warm_start=None, performance=None, performance_profile=None):
     # Fail unsupported operations visibly, rather than quietly falling back on CPU.
     # Users can explicitly retry the identical captured dataset with --device cpu.
-    out = prepare_run(directory, device, epochs, batch, architecture, input_pad_db, warm_start)
+    out = prepare_run(directory, device, epochs, batch, architecture, input_pad_db, warm_start, performance, performance_profile)
     print(f"Run folder: {out}", flush=True)
-    print(f"Settings: {read_json(out / 'manifest.json')['device']}, {epochs} epochs, batch {batch}", flush=True)
+    print(f"Settings: {read_json(out / 'manifest.json')['device']}, {epochs} epochs, batch {read_json(out / 'manifest.json')['batch_size']}", flush=True)
     if dry_run:
         print("Preflight passed; configs saved. No training started.", flush=True)
         return out
@@ -297,11 +319,16 @@ def _train_prepared(out, tier="", epoch_offset=0, total_epochs=None):
             initialize(trainer_module._get_parametric_net(module), out / 'warm_start.nam',
                        manifest['warm_start']['source_sha256'])
             print('Initialized fine-tuning from the raw NAM; targets retain raw recording units.', flush=True)
-    trainer_module._create_parametric_callbacks = lambda *a, **kw: [*create_callbacks(*a, **kw), Progress(),
-                                                                  *([WarmStart()] if manifest.get('warm_start') else [])]
+    callbacks = [Progress(), *([WarmStart()] if manifest.get('warm_start') else [])]
+    patience = manifest.get('performance', {}).get('early_stopping_patience', 0)
+    if patience:
+        callbacks.append(pl.callbacks.EarlyStopping(monitor='val_loss', mode='min',
+                         patience=patience, min_delta=1e-5, check_finite=True))
+    trainer_module._create_parametric_callbacks = lambda *a, **kw: [*create_callbacks(*a, **kw), *callbacks]
     try:
         with (out / "training.log").open("w", buffering=1) as logfile:
-            with redirect_stdout(Tee(sys.stdout, logfile)), redirect_stderr(Tee(sys.stderr, logfile)):
+            from .performance import runtime
+            with runtime(manifest['device']), redirect_stdout(Tee(sys.stdout, logfile)), redirect_stderr(Tee(sys.stderr, logfile)):
                 trainer_module.main(read_json(out / "data.json"), read_json(out / "model.json"),
                                     read_json(out / "learning.json"), out, no_show=True, make_plots=False)
         if not (out / "model_parametric.nam").is_file():

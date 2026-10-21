@@ -1,14 +1,16 @@
 # Bassman transient fine-tuning on Runpod
 
 Use a persistent `/workspace` volume and a CUDA PyTorch template with Python
-3.11–3.13. Upload/unzip `Bassman-Runpod-v3.zip` and enter `Bassman-Runpod-v3`.
+3.11–3.13. Upload/unzip `Bassman-Runpod-v4.zip` and enter `Bassman-Runpod-v4`.
 The package includes the original Standard raw NAM, original recordings, fresh
 teacher attack recordings, and a frozen trainer. It does not include a repaired
 playable model: fine-tuning and qualification must finish first.
 
 ```sh
 bash setup.sh
-.venv/bin/python train.py benchmark --batch 4 --epochs 3
+.venv/bin/python train.py tune --batches 4 8 16 32
+# Use the Performance report path printed above:
+.venv/bin/python train.py benchmark --epochs 3 --performance-profile project/performance/TUNE_FOLDER/benchmark.json
 # Read the printed run folder and its timing.json for an estimate on your GPU.
 .venv/bin/python train.py resume project/outputs/RUN_FOLDER --epochs 20
 .venv/bin/python train.py collect project/outputs/RUN_FOLDER
@@ -63,9 +65,31 @@ To build a package from source:
 
 ```sh
 python3 cloud/runpod/build_package.py --trainer . --upstream .upstream \
-  --dataset /path/to/augmented/project --output /path/to/Bassman-Runpod-v3.zip
+  --dataset /path/to/augmented/project --output /path/to/Bassman-Runpod-v4.zip
 ```
 
 The native teacher renderer is needed only when preparing fresh attack responses,
 not on Runpod. See the desktop README for the source manifest format and capture
 reference commands.
+
+
+`tune` is a bounded throughput experiment: up to eight separate processes, each
+with two warmup and four measured training batches and a 180-second timeout.
+It samples ordinary and augmented recordings, uses the real training loss and
+optimizer, and never saves a playable model or optimizer checkpoint. Failed/OOM
+trials are recorded and skipped. CPU/MPS use FP32 eager execution; CUDA can also
+test compilation and BF16 when supported. Inspect first-step and total process
+time as well as steady throughput before choosing compilation for a short run.
+
+Recommendations bind to the exact GPU/runtime, model/loss settings, starting
+weights and hashed recordings. A changed environment or project requires a new
+benchmark. Recommendations are provisional speed choices: full training and
+normal/transient qualification still decide whether a model is usable. The
+existing `benchmark` command remains a real multi-epoch training run that can be
+resumed. `resume` retains the original precision, windows, workers and scheduler.
+
+Explicit alternatives include `--precision bf16-mixed`, `--compile`, `--workers 2`,
+`--ny 16384`, `--scheduler plateau` and `--early-stopping-patience 20`. CUDA options
+fail visibly on CPU. A saved recommendation controls batch/window/precision/loader;
+its learning schedule and stopping patience may be chosen separately. No automatic
+learning-rate increase is applied when selecting a larger batch.

@@ -39,7 +39,7 @@ def main():
     with ZipFile(args.output, "x", ZIP_DEFLATED, compresslevel=1) as archive:
         def write(name, data):
             checksums[name] = hashlib.sha256(data).hexdigest()
-            archive.writestr("Bassman-Runpod-v3/" + name, data)
+            archive.writestr("Bassman-Runpod-v4/" + name, data)
 
         for name in ("train.py", "playback.py", "setup.sh", "requirements.txt", "README.md"):
             write(name, (script_dir / name).read_bytes())
@@ -62,7 +62,7 @@ def main():
         write("vendor/NAM-LICENSE", (upstream / "LICENSE").read_bytes())
         if args.dataset.is_dir():
             for path in sorted(args.dataset.rglob('*')):
-                if path.is_file() and path.suffix != '.f32' and 'outputs' not in path.relative_to(args.dataset).parts:
+                if path.is_file() and path.suffix != '.f32' and not {'outputs', 'performance'} & set(path.relative_to(args.dataset).parts):
                     write('project/' + path.relative_to(args.dataset).as_posix(), path.read_bytes())
         else:
             with ZipFile(args.dataset) as dataset:
@@ -75,7 +75,7 @@ def main():
                         continue
                     write("project/" + str(relative), dataset.read(info))
         write("PROVENANCE.json", (json.dumps(provenance, indent=2) + "\n").encode())
-        archive.writestr("Bassman-Runpod-v3/SHA256.json", json.dumps(checksums, indent=2) + "\n")
+        archive.writestr("Bassman-Runpod-v4/SHA256.json", json.dumps(checksums, indent=2) + "\n")
     with args.output.open("rb") as source:
         digest = hashlib.file_digest(source, "sha256").hexdigest()
     args.output.with_suffix(".zip.sha256").write_text(f"{digest}  {args.output.name}\n")

@@ -55,23 +55,7 @@ def device_check(device):
 
 
 def configure(device, batch):
-    import torch
     from parametric_mac import training
-    original_config = training.mac_learning_config
-
-    def learning_config(original, selected, epochs=200, batch=1):
-        config = original_config(original, "cpu", epochs, batch)
-        config["trainer"].update(accelerator="gpu" if device == "cuda" else "cpu",
-                                 benchmark=device == "cuda", enable_model_summary=False)
-        config["trainer_fit_kwargs"] = {}
-        for name in ("train_dataloader", "val_dataloader"):
-            config[name]["pin_memory"] = device == "cuda"
-        return config
-
-    training.select_device = lambda requested: device
-    training.mac_learning_config = learning_config
-    # Explicit FP32 baseline. Mixed precision/compilation need audio-quality validation.
-    torch.set_float32_matmul_precision("highest")
     return training
 
 
@@ -169,7 +153,11 @@ def train(args):
     import pytorch_lightning as pl
     pl.seed_everything(42, workers=True)
     training = configure(args.device, args.batch)
-    out = training.prepare_run(args.project, args.device, args.epochs, args.batch, args.architecture, warm_start=args.warm_start)
+    out = training.prepare_run(args.project, args.device, args.epochs, args.batch, args.architecture, warm_start=args.warm_start,
+                               performance={k:v for k,v in {'precision':args.precision, 'workers':args.workers,
+                                   'ny':args.ny, 'compile':args.compiled, 'scheduler':args.scheduler,
+                                   'early_stopping_patience':args.early_stopping_patience}.items() if v is not None},
+                               performance_profile=args.performance_profile)
     manifest = read(out / "manifest.json")
     manifest["runpod_package"] = read(ROOT / "PROVENANCE.json")
     manifest["package_sources_sha256"] = read(ROOT / "SHA256.json")
@@ -238,7 +226,21 @@ def main():
         command.add_argument("--hourly-rate", type=float, default=0.89)
         command.add_argument("--device", choices=("cuda", "cpu"), default="cuda",
                              help="CPU is for local verification only; default CUDA never falls back.")
+        command.add_argument('--precision', choices=('32-true','bf16-mixed'), default=None)
+        command.add_argument('--workers', type=int, default=None)
+        command.add_argument('--ny', type=int, default=None)
+        command.add_argument('--compile', dest='compiled', action='store_true', default=None)
+        command.add_argument('--scheduler', choices=('original','plateau'), default=None)
+        command.add_argument('--early-stopping-patience', type=int, default=None)
+        command.add_argument('--performance-profile', type=Path)
         command.add_argument("--check", action="store_true", help="Validate and save configs without training")
+    command = sub.add_parser('tune', help='Measure disposable speed trials; does not start a full training run')
+    command.add_argument('--project', type=Path, default=ROOT/'project')
+    command.add_argument('--device', choices=('cuda','cpu'), default='cuda')
+    command.add_argument('--architecture', choices=('a2-standard','a2-nano'), default='a2-standard')
+    command.add_argument('--batches', type=int, nargs='+', default=[4,8,16,32])
+    command.add_argument('--steps', type=int, default=4)
+    command.add_argument('--max-trials', type=int, default=8)
     command = sub.add_parser("resume")
     command.add_argument("run", type=Path)
     command.add_argument("--epochs", type=int, default=200, help="Total target, including completed epochs")
@@ -261,6 +263,10 @@ def main():
         import nam.train.parametric
         import parametric_mac.training
         print("Headless trainer imports passed.")
+    elif args.command == 'tune':
+        device_check(args.device)
+        from parametric_mac.benchmark import tune
+        tune(args.project, args.device, args.architecture, args.batches, args.steps, max_trials=args.max_trials)
     elif args.command in ("benchmark", "train"):
         train(args)
     elif args.command == "resume":

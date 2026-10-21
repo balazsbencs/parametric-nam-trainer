@@ -8,4 +8,4 @@ python3 -m venv --system-site-packages .venv
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python train.py doctor
 .venv/bin/python -m pip freeze > installed-requirements.txt
-echo 'Setup complete. Next: .venv/bin/python train.py benchmark --batch 1'
+echo 'Setup complete. Next: .venv/bin/python train.py tune'
