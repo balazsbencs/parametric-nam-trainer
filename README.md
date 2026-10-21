@@ -1,5 +1,7 @@
 # Parametric capture for Mac
 
+Version **0.2.0** · [Release notes](CHANGELOG.md)
+
 Capture pedals or amps at many knob and switch settings, and train one controllable NAM model on your Apple Silicon Mac. The app opens on **Start** and then walks you through five steps: **Gear → Connect → Record → Train → Listen**. Each step has one job and one main button. Technical settings stay under **Expert settings** on each page.
 
 The app works with any sound card. It has a dark and a light theme: by default it follows the macOS setting, and **View → Appearance** (or the ◐ button in the top bar) lets you choose **Match macOS**, **Light** or **Dark**. Fonts (Geist and Geist Mono) and icons are bundled and load locally.

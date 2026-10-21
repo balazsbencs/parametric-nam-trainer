@@ -6,8 +6,8 @@ root = Path(__file__).resolve().parents[1]
 out = root / 'dist' / 'parametric-mac.zip'
 out.parent.mkdir(exist_ok=True)
 files = [root / name for name in ('README.md', 'pyproject.toml', '.python-version', '.gitignore',
-          'Install.command', 'Capture.command', 'Train.command', 'PRODUCT.md', 'DESIGN.md')]
-for folder in ('parametric_mac', 'docs', 'tests', 'scripts'):
+          'Install.command', 'Capture.command', 'Train.command', 'PRODUCT.md', 'DESIGN.md', 'CHANGELOG.md')]
+for folder in ('parametric_mac', 'docs', 'tests', 'scripts', 'cloud'):
     files.extend(p for p in (root / folder).rglob('*') if p.is_file() and
                  '__pycache__' not in p.parts and p.suffix != '.pyc')
 # Carry the native design record and evidence referenced by the shipped docs.
