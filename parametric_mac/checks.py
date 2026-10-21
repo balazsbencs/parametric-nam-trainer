@@ -95,6 +95,7 @@ def check_project(directory, data=None, model=None):
         # File/audio checks deliberately work without torch installed.
         settings = {"train": set(), "validation": set()}
         cache, rates, outputs = {}, set(), set()
+        preceding_silence = {}
         for split in settings:
             entries = data.get(split, [])
             if not isinstance(entries, list) or not entries:
@@ -161,6 +162,22 @@ def check_project(directory, data=None, model=None):
                     start = frames + start if start < 0 else start
                     stop = frames + stop if stop < 0 else stop
                     usable = stop - start - abs(delay)
+                    # Match the pinned trainer's default 0.4-second pre-silence
+                    # requirement before a cropped window. Otherwise Check can
+                    # succeed and training fail while loading the same recordings.
+                    pre_silence = merged.get("require_input_pre_silence", 0.4)
+                    if start > 0 and pre_silence is not None:
+                        if not isinstance(pre_silence, (int, float)) or not math.isfinite(pre_silence) or pre_silence < 0:
+                            report.errors.append(f"{label}: required input pre-silence must be finite and nonnegative.")
+                        else:
+                            key = (merged["x_path"], start, int(pre_silence * rate))
+                            if key not in preceding_silence:
+                                with sf.SoundFile(merged["x_path"]) as audio:
+                                    begin = max(0, start - key[2])
+                                    audio.seek(min(begin, len(audio)))
+                                    preceding_silence[key] = not np.any(audio.read(max(0, min(start, len(audio)) - begin), dtype="float32"))
+                            if not preceding_silence[key]:
+                                report.errors.append(f"{label}: input must be silent for {pre_silence:g} seconds before the training window; choose a start after silence or include the earlier context.")
                     if start < 0 or stop > frames or stop <= start or usable < receptive:
                         report.errors.append(f"{label}: invalid training window after delay alignment.")
                     ny = merged.get("ny")
