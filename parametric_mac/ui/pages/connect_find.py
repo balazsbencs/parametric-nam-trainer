@@ -7,11 +7,11 @@ from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QPushButton, QVBoxLayout
 from nam.capture import audio
 
 from ...capture_cards import capture_cards
-from ...device_rates import live_half_transports
+from ... import device_rates
 from ...find_route import FindResult, Route
 from ...find_scan import ScanTarget, scan_target
 from ..copy import (
-    FIND_CANCELLED_TEXT, FIND_FAILED_TEXT, find_message, loopback_note, route_choice_text,
+    FIND_CANCELLED_TEXT, FIND_FAILED_TEXT, card_rate_message, find_message, loopback_note, route_choice_text,
     several_routes_text, stopped_early_note,
 )
 from ..widgets.common import button, label, set_style_property
@@ -113,24 +113,26 @@ class ConnectFindMixin:
     def _find_target(self) -> ScanTarget | None:
         """Everything the scan needs, read here on the GUI thread as plain values."""
         device = self.device_combo.currentData()
-        if device is None:
+        if device is None or self._busy():
             return None
         try:
-            cards = capture_cards(audio.list_devices(), live_half_transports()).cards
+            # PortAudio caches its device table until reinitialised; no stream is open here.
+            devices = audio.list_devices(refresh=True)
+            self._update_live_device_rates()
+            cards = capture_cards(devices, self._live_half_transports).cards
             card = next((c for c in cards if (c.name, c.host_api) == (device.name, device.host_api)), None)
             if card is None:
-                return None
-            source = audio.find_device(card.name, kind="input", host_api=card.host_api)
-            sink = audio.find_device(card.name, kind="output", host_api=card.host_api)
-            if (source.index, sink.index) != (card.input_index, card.output_index):
                 return None
         except Exception:
             log.debug("Could not resolve Find's sound card", exc_info=True)
             return None
-        rate = self._device_sample_rate() or int(round(card.default_samplerate))
+        rates = device_rates.card_rates(card, self._live_half_rates)
+        if card_rate_message(*rates, self._file_sample_rate()):
+            return None
+        rate = rates[0] or int(round(card.default_samplerate))
         excluded = (frozenset({self.loopback_input_channel_spin.value()}) if self.loopback_check.isChecked()
                     else frozenset())
-        return ScanTarget(source.index, sink.index, card.max_output_channels, card.max_input_channels, rate,
+        return ScanTarget(card.input_index, card.output_index, card.max_output_channels, card.max_input_channels, rate,
                           int(self.buffer_size_combo.currentData()), self.latency_combo.currentData(), excluded)
 
     def _scan_outputs(self, target: ScanTarget, progress, cancel) -> FindResult:
@@ -187,6 +189,8 @@ class ConnectFindMixin:
 
     def _use_route(self, route: Route, stopped_early: bool = False) -> None:
         """Set and save the channels, then ask for a new level check: the old one was for another route."""
+        if not self._find_allowed():
+            return
         self.output_channel_spin.setValue(route.output_channel)
         self.input_channel_spin.setValue(route.input_channel)
         self._save_audio_settings()

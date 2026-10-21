@@ -95,8 +95,7 @@ def build_window(inputs: Path):
     devices = [DeviceInfo(0, "Scarlett 2i2", "Core Audio", 2, 2, 48000.0)]
     upstream._list_devices = lambda **kw: devices
     audio.list_devices = lambda **kw: devices
-    device_rates.live_half_rates = lambda: {}
-    device_rates.live_half_transports = lambda: {}
+    device_rates.live_device_state = lambda: ({}, {})
     window = MacWindow()
     window._render_devices = devices
     window._inputs_dir = inputs

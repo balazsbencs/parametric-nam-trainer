@@ -1,12 +1,11 @@
 """Connect page: wire it up, find the connection, check the loudest level."""
 from PySide6.QtCore import QProcess, Qt
 from PySide6.QtWidgets import QCheckBox, QComboBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QSizePolicy, QToolButton, QVBoxLayout, QWidget
-from nam.capture.gui.main import read_wav_rate
+from nam.capture.gui.main import read_wav_rate, sample_rate_warnings
 
 from ..copy import CONNECT_HELP, level_message, card_rate_message, card_rate_label
 from ..widgets.common import PAGE_MARGIN, PageScroll, button, disclosure, field, label, set_style_property, themed
 from ..widgets.meters import CableChain, LevelMeter
-from ...capture_cards import CaptureCard
 from ...device_rates import card_rates
 from .connect_cards import ConnectCardsMixin
 from .connect_find import ConnectFindMixin
@@ -17,7 +16,6 @@ NEEDS = ("A sound card with one output and one input",
          "A reamp box (it makes the sound card output safe for a pedal input)",
          "The gear's own power supply")
 AMP_NEED = "A load box that matches your amp's speaker output"
-NO_DEVICE_TEXT = "No sound card found. Plug it in, then press refresh."
 
 
 class Stage(QFrame):
@@ -191,16 +189,35 @@ class ConnectPageMixin(ConnectCardsMixin, ConnectFindMixin):
         self._update_live_device_rates()
         return self._device_rate(self.device_combo.currentData(), self._live_device_rates)
 
+    def _cached_wav_rate(self, path) -> int | None:
+        try:
+            stat = path.stat()
+        except OSError:
+            return None
+        signature = (stat.st_mtime_ns, stat.st_size)
+        cache = getattr(self, "_wav_rate_cache", {})
+        if path not in cache or cache[path][0] != signature:
+            cache[path] = (signature, read_wav_rate(path))
+        self._wav_rate_cache = cache
+        return cache[path][1]
+
     def _file_sample_rate(self) -> int | None:
         if self.project is None or self.project_dir is None:
             return None
-        return read_wav_rate(self.project_dir / self.project.train_input)
+        return self._cached_wav_rate(self.project_dir / self.project.train_input)
+
+    def _current_sample_rate_warnings(self) -> list[str]:
+        if self.project is None or self.project_dir is None:
+            return []
+        device = self._device_rate(self.device_combo.currentData(), self._live_device_rates)
+        return sample_rate_warnings(self._file_sample_rate(),
+                                    self._cached_wav_rate(self.project_dir / self.project.validation_input), device, device)
 
     def _refresh_rates(self) -> None:
         """Asking CoreAudio is slow: read both rates once per state sync."""
         device = self._device_sample_rate() if self._has_device() else None
         card = self.device_combo.currentData()
-        self._half_rates = (card_rates(card, self._live_half_rates) if isinstance(card, CaptureCard)
+        self._half_rates = (card_rates(card, self._live_half_rates) if card is not None
                             else (device, device))
         self._rates = (device, self._file_sample_rate())
 
@@ -240,6 +257,8 @@ class ConnectPageMixin(ConnectCardsMixin, ConnectFindMixin):
 
     def _reset_connect(self) -> None:
         """Reopen or new project: confirm the wiring and check the level again."""
+        self._wav_rate_cache = {}
+        self._load_audio_settings_into_ui()
         self.wire_check.setChecked(False)
         self._route_fingerprint = None
         self._show_level(None)

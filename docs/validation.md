@@ -110,3 +110,55 @@ changed Connect modules.
 **USB Audio CODEC (Core Audio) · 2 in · 2 out**, Find returning **Output 1 → Input 1**, a passed
 **Check level**, and one recorded take without dropouts. Record the outcome here; automated
 and offscreen tests do not establish those hardware results.
+
+## Split-interface review fixes — 2026-10-21
+
+The PR #7 review was reproduced with injected CoreAudio/PortAudio backends and offscreen Qt
+before implementation: **13 regression cases failed, 10 passed, 1 skipped**. After the fixes,
+the focused device-rate and Connect/Find suite passed **32 tests**, with the native CoreAudio
+smoke test skipped. No test played or recorded audio.
+
+The review findings are addressed as follows:
+
+1. Device, stream-scope and individual rate/transport failures are isolated. A bad device
+   no longer discards unrelated rates or Bluetooth metadata; a failed rate read also keeps
+   the same device's readable transport. System-level enumeration failures still return no
+   new readings, with debug diagnostics.
+2. Successful readings merge into the last known per-half rates and transports. Empty or
+   partial polls keep the other readings; an empty refresh cannot readmit known AirPods.
+3. Refresh clears Find results, route-choice links and the old level proof. Programmatic
+   selection changes explicitly invalidate their route, and an unselected card cannot apply
+   an old route choice.
+4. Standalone Connect blocks mismatched input/output rates even without project WAV files.
+   The message names both rates and asks for one shared rate.
+5. Project transitions reload selection and settings from the active project or standalone
+   settings. A new capture clears the prior project's missing-card notice without writing
+   to that old project.
+6. An ambiguous saved name gets the duplicate-name instruction only. The generic "plug it
+   in" message is hidden when ambiguity, rather than absent hardware, explains the list.
+7. Explicit Expert edits persist while no card is selected. The stored device name/host API
+   remains intact; channel widgets retain saved ranges instead of clamping during reload.
+8. Find reinitialises PortAudio once with `list_devices(refresh=True)` before resolving both
+   indexes from that single table. It refuses to reinitialise while a job/worker is active,
+   rechecks the half rates, and avoids the former repeated cached name lookups.
+9. A steady rate poll reads one combined CoreAudio snapshot. Warning checks consume it;
+   WAV headers are cached by path, size and modification time. A replaced WAV invalidates
+   the cache and updates the rate block.
+10. The unreachable DeviceInfo/other-combo fallback paths and duplicate no-device constant
+    are removed. Find accesses the shared device module instead of capturing an I/O helper
+    at import time. The offscreen harness and the standalone GUI integration test stub the
+    CoreAudio read boundary, and the screenshot renderer stubs the combined snapshot.
+
+Six offscreen compact screenshots covered duplicate cards, a missing card and standalone
+split rates in dark/light themes. Copy wraps within the existing stages; no style or layout
+change was needed. The design detector reported no findings on the changed Connect/project
+modules. These screenshots and backend simulations do not qualify physical macOS audio I/O;
+the UMC22 and native CoreAudio checks remain pending.
+
+
+Final review-fix gate: **297 passed, 1 skipped, 10 upstream Lightning warnings** in
+**580.62 seconds** on Linux/Python 3.13/PySide6 6.12. `capture_cards.py` and the testable part
+of `device_rates.py` both have **100% coverage** (111 statements total); native CoreAudio
+adapter calls remain excluded. The sole skipped test is the macOS CoreAudio smoke test.
+The full suite includes the Bluetooth-cache and changed-WAV regressions in addition to the
+13 cases that failed before the fixes. No upstream files or runtime dependencies changed.

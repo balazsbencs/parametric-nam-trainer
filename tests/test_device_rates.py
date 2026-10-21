@@ -22,7 +22,7 @@ def test_rate_messages():
             f"The {half} of your sound card runs at 44.1 kHz. Set it to 48 kHz in Audio MIDI Setup, then check again.")
     assert card_rate_message(48000, 48000, 48000) is None
     assert card_rate_message(None, None, 48000) is None
-    assert card_rate_message(44100, 48000, None) is None
+    assert card_rate_message(44100, 48000, None) is not None
     assert card_rate_message(44100, 44100, 48000).startswith("Your sound card runs at 44.1 kHz.")
 
 
@@ -86,3 +86,41 @@ def test_coreaudio_walk_checks_each_scope_and_decodes_transport(monkeypatch):
     monkeypatch.setattr(device_rates, "_CoreAudio", FakeCoreAudio)
     assert device_rates._coreaudio_halves() == [("USB", "output", 48000, "usb "),
                                                ("USB", "input", 44100, "usb ")]
+
+
+@pytest.mark.parametrize("bad_selector", ["name", "nsrt", "tran", "stm#"])
+def test_one_unreadable_device_does_not_hide_other_rates_or_bluetooth(monkeypatch, bad_selector):
+    import ctypes
+    class Core:
+        def size(self, device, selector, scope="glob"):
+            if selector == "dev#":
+                return 3 * ctypes.sizeof(ctypes.c_uint32)
+            if device == 1 and bad_selector == selector:
+                raise OSError("unreadable device")
+            return 4
+        def read(self, device, selector, value, scope="glob"):
+            if selector == "dev#":
+                value[:] = [1, 2, 3]
+            elif device == 1 and bad_selector == selector:
+                raise OSError("unreadable device")
+            else:
+                value.value = 48000 if selector == "nsrt" else device_rates._fourcc("blue" if device == 3 else "usb ")
+        def name(self, device):
+            if device == 1 and bad_selector == "name":
+                raise OSError("unreadable device")
+            return {1: "Broken", 2: "USB", 3: "AirPods"}[device]
+    monkeypatch.setattr(device_rates, "_CoreAudio", Core)
+    monkeypatch.setattr(device_rates.sys, "platform", "darwin")
+    rates = device_rates.live_half_rates()
+    transports = device_rates.live_half_transports()
+    assert rates[("USB", "input")] == rates[("AirPods", "output")] == 48000
+    assert transports[("AirPods", "input")] == "blue"
+    if bad_selector == "nsrt":
+        assert ("Broken", "input") not in rates and transports[("Broken", "input")] == "usb "
+    if bad_selector == "tran":
+        assert rates[("Broken", "input")] == 48000 and ("Broken", "input") not in transports
+
+
+def test_split_rates_block_without_project():
+    message = card_rate_message(44100, 48000, None)
+    assert message and "44.1 kHz" in message and "48 kHz" in message

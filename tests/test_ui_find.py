@@ -19,6 +19,7 @@ upstream._list_devices = lambda **kw: devices
 audio.list_devices = lambda **kw: devices
 device_rates.live_half_rates = lambda: {}
 device_rates.live_half_transports = lambda: {}
+device_rates.live_device_state = lambda: (device_rates.live_half_rates(), device_rates.live_half_transports())
 from parametric_mac.gui import MacWindow
 window = MacWindow(); window.resize(1140, 900); window.show()
 window.device_combo.setCurrentIndex(window.device_combo.count() - 1)
@@ -69,7 +70,7 @@ assert window.find_button.isEnabled() and window.find_button.text() == "Find my 
 device_rates.live_half_rates = lambda: {("Test interface", "input"): 44100, ("Test interface", "output"): 44100}
 window._file_sample_rate = lambda: 48000; window._sync_states()
 assert not window.find_button.isEnabled()
-device_rates.live_half_rates = lambda: {}; window._sync_states()
+device_rates.live_half_rates = lambda: {("Test interface", "input"): 48000, ("Test interface", "output"): 48000}; window._sync_states()
 
 # Found: channels set and saved, level check cleared, loopback listed in Expert settings.
 set_channels(1, 2); window._show_level(-9.0); window._route_fingerprint = "old"

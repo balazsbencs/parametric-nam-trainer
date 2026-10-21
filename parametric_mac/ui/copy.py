@@ -77,6 +77,9 @@ def sample_rate_message(device_rate: int | None, file_rate: int | None) -> str |
 
 def card_rate_message(input_rate: int | None, output_rate: int | None, file_rate: int | None) -> str | None:
     """Name the mismatched half; equal rates keep the existing duplex wording."""
+    if file_rate is None and input_rate is not None and output_rate is not None and input_rate != output_rate:
+        return (f"Your sound card’s input runs at {_khz(input_rate)} and its output runs at {_khz(output_rate)}. "
+                "Set both to the same sample rate in Audio MIDI Setup, then check again.")
     if input_rate == output_rate:
         return sample_rate_message(input_rate, file_rate)
     for half, rate in (("input", input_rate), ("output", output_rate)):

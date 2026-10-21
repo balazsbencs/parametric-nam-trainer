@@ -24,6 +24,7 @@ upstream._list_devices = lambda **kw: devices
 audio.list_devices = lambda **kw: devices
 device_rates.live_half_transports = lambda: {}
 device_rates.live_half_rates = lambda: {}
+device_rates.live_device_state = lambda: (device_rates.live_half_rates(), device_rates.live_half_transports())
 from parametric_mac.gui import MacWindow
 window = MacWindow(); window._inputs_dir = inputs
 window.resize(1140, 900); window.show(); app.processEvents()
@@ -83,7 +84,7 @@ assert window.card_notice.isHidden()
 choose("BlackHole 2ch")
 devices = [blackhole, dev(9, 2, 2, "BlackHole 2ch")]; refresh()
 assert window.device_combo.currentIndex() == -1
-assert 'This project used “BlackHole 2ch”' in window.card_notice.text()
+assert 'This project used “BlackHole 2ch”' not in window.card_notice.text()
 assert 'Two sound cards are called “BlackHole 2ch”' in window.card_notice.text()
 print("OK")
 ''')

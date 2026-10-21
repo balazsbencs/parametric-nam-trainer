@@ -17,6 +17,8 @@ from nam.capture.audio import DeviceInfo
 upstream._list_devices = lambda **kw: [DeviceInfo(0, "Test interface", "Core Audio", 4, 4, 48000)]
 from parametric_mac import device_rates
 device_rates.live_half_rates = lambda: {}
+device_rates.live_half_transports = lambda: {}
+device_rates.live_device_state = lambda: (device_rates.live_half_rates(), device_rates.live_half_transports())
 from parametric_mac.gui import MacWindow
 window = MacWindow(); window._inputs_dir = inputs
 window.device_combo.setCurrentIndex(0)
@@ -54,7 +56,7 @@ device_rates.live_half_rates = lambda: {("Test interface", "input"): 44100, ("Te
 window._sync_states(); app.processEvents()
 assert not window.connect_button.isEnabled()
 assert "44.1 kHz" in window.sample_rate_message_label.text() and window.audio_midi_button.isVisible()
-device_rates.live_half_rates = lambda: {}; window._sync_states()
+device_rates.live_half_rates = lambda: {("Test interface", "input"): 48000, ("Test interface", "output"): 48000}; window._sync_states()
 
 # Reopen: checkbox off, level cleared, not ready.
 folder = window.project_dir

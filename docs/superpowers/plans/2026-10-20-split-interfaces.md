@@ -209,3 +209,15 @@ Linux font test accepts the expected family among Fontconfig's additional weight
 Task 5's software steps are complete: documentation, a Connect-only renderer and 16 native
 screenshots, including split selection and a simulated Find result in both themes/sizes.
 The remaining hardware step is deliberately unchecked and recorded in `docs/validation.md`.
+
+
+## Review follow-up — 2026-10-21
+
+The user's ten review findings supersede two details of the original plan: preserve the saved
+**device identity** when selection is absent, while persisting explicit Expert edits; and show
+only the duplicate-name instruction when an ambiguous saved name is present, instead of also
+calling it disconnected. Find now refreshes PortAudio once before pairing the current table,
+without subsequent cached `find_device` lookups. Rates and transports share one CoreAudio
+snapshot, keep successful prior readings and isolate device/property errors. WAV headers are
+cached with file-change invalidation. Regression evidence and the full disposition of all ten
+findings are in the 2026-10-21 entry of `docs/validation.md`.

@@ -11,6 +11,7 @@ from .capture_cards import CaptureCard
 
 Direction = Literal["input", "output"]
 Half = tuple[str, Direction]
+HalfReading = tuple[str, Direction, float | None, str | None]
 log = logging.getLogger(__name__)
 
 
@@ -21,7 +22,7 @@ def card_rates(card: CaptureCard, live: Mapping[Half, float]) -> tuple[int | Non
             round(live.get((card.name, "output"), card.output_default_rate)))
 
 
-def _live_halves() -> list[tuple[str, Direction, float, str]]:
+def _live_halves() -> list[HalfReading]:
     if sys.platform != "darwin":
         return []
     try:
@@ -31,12 +32,20 @@ def _live_halves() -> list[tuple[str, Direction, float, str]]:
         return []
 
 
+def live_device_state() -> tuple[dict[Half, float], dict[Half, str]]:
+    """Read rates and transports in one walk; a failed property need not lose the other."""
+    halves = _live_halves()
+    rates = {(name, direction): rate for name, direction, rate, _ in halves if rate is not None}
+    transports = {(name, direction): transport for name, direction, _, transport in halves if transport is not None}
+    return rates, transports
+
+
 def live_half_rates() -> dict[Half, float]:
-    return {(name, direction): rate for name, direction, rate, _ in _live_halves()}
+    return live_device_state()[0]
 
 
 def live_half_transports() -> dict[Half, str]:
-    return {(name, direction): transport for name, direction, _, transport in _live_halves()}
+    return live_device_state()[1]
 
 
 def _fourcc(code: str) -> int:
@@ -85,18 +94,38 @@ class _CoreAudio:  # pragma: no cover - needs CoreAudio
             self.foundation.CFRelease(value)
 
 
-def _coreaudio_halves() -> list[tuple[str, Direction, float, str]]:
+def _property(core: _CoreAudio, device: int, selector: str, value):
+    try:
+        core.read(device, selector, value)
+        return value.value
+    except Exception:
+        log.debug("Could not read CoreAudio %s for device %s", selector, device, exc_info=True)
+        return None
+
+
+def _device_halves(core: _CoreAudio, device: int) -> list[HalfReading]:
+    name = core.name(device)
+    rate = _property(core, device, "nsrt", ctypes.c_double())
+    transport = _property(core, device, "tran", ctypes.c_uint32())
+    fourcc = transport.to_bytes(4, "big").decode("ascii") if transport is not None else None
+    halves = []
+    for direction, scope in (("input", "inpt"), ("output", "outp")):
+        try:
+            if core.size(device, "stm#", scope) > 0:
+                halves.append((name, direction, rate, fourcc))
+        except Exception:
+            log.debug("Could not read CoreAudio %s streams for device %s", direction, device, exc_info=True)
+    return halves
+
+
+def _coreaudio_halves() -> list[HalfReading]:
     core = _CoreAudio()
     devices = (ctypes.c_uint32 * (core.size(1, "dev#") // ctypes.sizeof(ctypes.c_uint32)))()
     core.read(1, "dev#", devices)
     halves = []
     for device in devices:
-        name = core.name(device)
-        rate, transport = ctypes.c_double(), ctypes.c_uint32()
-        core.read(device, "nsrt", rate)
-        core.read(device, "tran", transport)
-        fourcc = transport.value.to_bytes(4, "big").decode("ascii")
-        for direction, scope in (("input", "inpt"), ("output", "outp")):
-            if core.size(device, "stm#", scope) > 0:
-                halves.append((name, direction, rate.value, fourcc))
+        try:
+            halves.extend(_device_halves(core, device))
+        except Exception:
+            log.debug("Could not read CoreAudio device %s", device, exc_info=True)
     return halves
