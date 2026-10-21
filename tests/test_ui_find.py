@@ -187,3 +187,23 @@ finally:
     gate.set()
 print("OK")
 """)
+
+
+def test_cancel_while_success_is_queued_preserves_channels_and_level_proof():
+    run_gui(SETUP + r'''
+from types import SimpleNamespace
+set_channels(1, 2)
+window._show_level(-9.)
+window._route_fingerprint = 'checked'
+window._finding = True
+window._cancel_token = SimpleNamespace(cancel=lambda: None)
+window._on_find_clicked()
+# Worker cleanup precedes the queued success handler.
+window._cancel_token = None
+window._find_finished()
+window._on_find_success(FindResult('found', (Route(2, 1, -18., ()),), ()))
+assert channels() == (1, 2) and saved() == (1, 2)
+assert window._route_fingerprint == 'checked' and window.level_meter.peak == -9.
+assert window.find_result.text() == 'Search cancelled.'
+print('OK')
+''')
