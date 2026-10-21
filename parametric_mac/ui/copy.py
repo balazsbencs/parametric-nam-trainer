@@ -77,6 +77,28 @@ def sample_rate_message(device_rate: int | None, file_rate: int | None) -> str |
             "then check again.")
 
 
+def card_rate_message(input_rate: int | None, output_rate: int | None, file_rate: int | None) -> str | None:
+    """Name the mismatched half; equal rates keep the existing duplex wording."""
+    if file_rate is None and input_rate is not None and output_rate is not None and input_rate != output_rate:
+        return (f"Your sound card’s input runs at {_khz(input_rate)} and its output runs at {_khz(output_rate)}. "
+                "Set both to the same sample rate in Audio MIDI Setup, then check again.")
+    if input_rate == output_rate:
+        return sample_rate_message(input_rate, file_rate)
+    for half, rate in (("input", input_rate), ("output", output_rate)):
+        if rate is not None and file_rate is not None and rate != file_rate:
+            return (f"The {half} of your sound card runs at {_khz(rate)}. Set it to {_khz(file_rate)} "
+                    "in Audio MIDI Setup, then check again.")
+    return None
+
+
+def card_rate_label(input_rate: int | None, output_rate: int | None) -> str:
+    if input_rate is None or output_rate is None:
+        return ""
+    if input_rate == output_rate:
+        return _khz(input_rate)
+    return f"in {_khz(input_rate)} · out {_khz(output_rate)}"
+
+
 def level_message(peak_dbfs: float, clip_threshold: float = ROUTE_CLIP_DBFS, *, locked: bool = False) -> tuple[Literal["ok", "clip"], str]:
     if peak_dbfs >= clip_threshold:
         return "clip", LOCKED_CLIP_TEXT if locked else CLIP_TEXT
@@ -85,6 +107,7 @@ def level_message(peak_dbfs: float, clip_threshold: float = ROUTE_CLIP_DBFS, *, 
 
 CONNECT_HELP = "\n".join((
     "No sound card in the list: plug it in, wait a moment, then press refresh.",
+    "Two sound cards with the same name: unplug one, then press refresh.",
     "Wrong sample rate: open Audio MIDI Setup, select your sound card and set it to 48 kHz.",
     "No signal comes back: check every cable, the reamp box and the power supply of your gear. "
     "Check that the output and input channels match the jacks you use.",

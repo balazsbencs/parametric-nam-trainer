@@ -220,11 +220,13 @@ class ProjectMixin:
         self._sync_states()
 
     def _refresh_sample_rate_warning(self):
-        super()._refresh_sample_rate_warning()
-        for warning in (self.sample_rate_warning_label, self.capture_sample_rate_warning_label):
-            warning.setText(warning.text().replace('⚠', '').strip())
+        # One state sync reads one CoreAudio snapshot. Warning checks consume that snapshot.
         if self._ready:
             self._sync_states()
+        text = "\n".join(self._current_sample_rate_warnings())
+        for warning in (self.sample_rate_warning_label, self.capture_sample_rate_warning_label):
+            warning.setText(text)
+            warning.setVisible(bool(text))
 
     def _on_export_concat_configs(self):
         from nam.capture.export import write_concat_training_configs

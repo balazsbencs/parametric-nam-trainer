@@ -1,11 +1,13 @@
 """Connect page: wire it up, find the connection, check the loudest level."""
 from PySide6.QtCore import QProcess, Qt
-from PySide6.QtWidgets import QCheckBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
-from nam.capture.gui.main import read_wav_rate
+from PySide6.QtWidgets import QCheckBox, QComboBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QSizePolicy, QToolButton, QVBoxLayout, QWidget
+from nam.capture.gui.main import read_wav_rate, sample_rate_warnings
 
-from ..copy import CONNECT_HELP, level_message, sample_rate_message
+from ..copy import CONNECT_HELP, level_message, card_rate_message, card_rate_label
 from ..widgets.common import PAGE_MARGIN, PageScroll, button, disclosure, field, label, set_style_property, themed
 from ..widgets.meters import CableChain, LevelMeter
+from ...device_rates import card_rates
+from .connect_cards import ConnectCardsMixin
 from .connect_find import ConnectFindMixin
 
 WIRE_TEXT = "Monitoring is off and speakers are unplugged from the sound card"
@@ -14,7 +16,6 @@ NEEDS = ("A sound card with one output and one input",
          "A reamp box (it makes the sound card output safe for a pedal input)",
          "The gear's own power supply")
 AMP_NEED = "A load box that matches your amp's speaker output"
-NO_DEVICE_TEXT = "No sound card found. Plug it in, then press refresh."
 
 
 class Stage(QFrame):
@@ -43,7 +44,7 @@ class Stage(QFrame):
         set_style_property(self, "done", done)
 
 
-class ConnectPageMixin(ConnectFindMixin):
+class ConnectPageMixin(ConnectCardsMixin, ConnectFindMixin):
     def _connect_page(self):
         self._level_state = None
         scroll = PageScroll()
@@ -86,6 +87,8 @@ class ConnectPageMixin(ConnectFindMixin):
     def _card_stage(self) -> Stage:
         stage = Stage(2, "Find the connection")
         row = QHBoxLayout()
+        self.device_combo.setMinimumContentsLength(12)
+        self.device_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         row.addWidget(self.device_combo, 1)
         self.refresh_devices_button = QToolButton()
         self.refresh_devices_button.setText("↻")
@@ -95,11 +98,15 @@ class ConnectPageMixin(ConnectFindMixin):
         row.addWidget(self.refresh_devices_button)
         self.sample_rate_label = label("", "muted")
         self.sample_rate_label.setWordWrap(False)
+        self.sample_rate_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         row.addWidget(self.sample_rate_label)
         stage.body.addLayout(row)
         self.no_devices_label.setStyleSheet("")  # upstream sets a fixed color; the theme decides
         self.no_devices_label.setProperty("role", "warn")
         stage.body.addWidget(self.no_devices_label)
+        self.card_notice = label("", "warn")
+        stage.body.addWidget(self.card_notice)
+        self._sync_card_notice()
         self.sample_rate_message_label = label("", "warn")
         self.audio_midi_button = button("Open Audio MIDI Setup", self._open_audio_midi_setup)
         self.audio_midi_button.setProperty("outline", True)
@@ -186,25 +193,42 @@ class ConnectPageMixin(ConnectFindMixin):
         self._update_live_device_rates()
         return self._device_rate(self.device_combo.currentData(), self._live_device_rates)
 
+    def _cached_wav_rate(self, path) -> int | None:
+        try:
+            stat = path.stat()
+        except OSError:
+            return None
+        signature = (stat.st_mtime_ns, stat.st_size)
+        cache = getattr(self, "_wav_rate_cache", {})
+        if path not in cache or cache[path][0] != signature:
+            cache[path] = (signature, read_wav_rate(path))
+        self._wav_rate_cache = cache
+        return cache[path][1]
+
     def _file_sample_rate(self) -> int | None:
         if self.project is None or self.project_dir is None:
             return None
-        return read_wav_rate(self.project_dir / self.project.train_input)
+        return self._cached_wav_rate(self.project_dir / self.project.train_input)
+
+    def _current_sample_rate_warnings(self) -> list[str]:
+        if self.project is None or self.project_dir is None:
+            return []
+        device = self._device_rate(self.device_combo.currentData(), self._live_device_rates)
+        return sample_rate_warnings(self._file_sample_rate(),
+                                    self._cached_wav_rate(self.project_dir / self.project.validation_input), device, device)
 
     def _refresh_rates(self) -> None:
         """Asking CoreAudio is slow: read both rates once per state sync."""
         device = self._device_sample_rate() if self._has_device() else None
+        card = self.device_combo.currentData()
+        self._half_rates = (card_rates(card, self._live_half_rates) if card is not None
+                            else (device, device))
         self._rates = (device, self._file_sample_rate())
 
     def _rate_problem(self) -> str | None:
         if not hasattr(self, "_rates"):
             self._refresh_rates()
-        return sample_rate_message(*self._rates)
-
-    def _refresh_devices(self):
-        super()._refresh_devices()
-        if hasattr(self, "no_devices_label") and self.device_combo.count() == 0:
-            self.no_devices_label.setText(NO_DEVICE_TEXT)
+        return card_rate_message(*self._half_rates, self._rates[1])
 
     def _connect_ready(self) -> bool:
         return (self.wire_check.isChecked() and self._has_device() and self._rate_problem() is None
@@ -215,8 +239,8 @@ class ConnectPageMixin(ConnectFindMixin):
         if not hasattr(self, "wire_stage"):
             return
         problem = self._rate_problem()
-        rate = self._rates[0]
-        self.sample_rate_label.setText(f"{rate / 1000:g} kHz" if rate else "")
+        self.sample_rate_label.setText(card_rate_label(*self._half_rates))
+        self._sync_card_notice()
         self.sample_rate_message_label.setText(problem or "")
         self.sample_rate_message_label.setVisible(problem is not None)
         self.audio_midi_button.setVisible(problem is not None)
@@ -238,6 +262,8 @@ class ConnectPageMixin(ConnectFindMixin):
 
     def _reset_connect(self) -> None:
         """Reopen or new project: confirm the wiring and check the level again."""
+        self._wav_rate_cache = {}
+        self._load_audio_settings_into_ui()
         self.wire_check.setChecked(False)
         self._route_fingerprint = None
         self._show_level(None)

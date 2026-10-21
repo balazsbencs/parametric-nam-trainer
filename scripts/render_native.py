@@ -28,6 +28,7 @@ from PySide6.QtCore import QProcess
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from nam.capture.audio import DeviceInfo
+from parametric_mac.capture_cards import CaptureCard
 
 from parametric_mac.find_route import FindResult, Route
 
@@ -89,19 +90,21 @@ class Renderer:
 def build_window(inputs: Path):
     import nam.capture.gui.main as upstream
     from parametric_mac.ui import project_io
+    from nam.capture import audio
+    from parametric_mac import device_rates
     for method in ("warning", "critical", "information"):
         setattr(upstream._QMessageBox, method, staticmethod(lambda *a, **k: None))  # no modal boxes
     project_io.FILES = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs.iterdir()}
     from parametric_mac.gui import MacWindow
+    devices = [DeviceInfo(0, "Scarlett 2i2", "Core Audio", 2, 2, 48000.0)]
+    upstream._list_devices = lambda **kw: devices
+    audio.list_devices = lambda **kw: devices
+    device_rates.live_device_state = lambda: ({}, {})
     window = MacWindow()
+    window._render_devices = devices
     window._inputs_dir = inputs
-    window._has_device = lambda: True
-    window._device_sample_rate = lambda: 48000
-    window._current_sample_rate_warnings = lambda: []
-    # The same sound card on every Mac, so the images never show this machine's devices.
-    device = DeviceInfo(0, "Scarlett 2i2", "Core Audio", 2, 2, 48000.0)
-    window.device_combo.clear()
-    window.device_combo.addItem(upstream.format_device_label(device), device)
+    window.device_combo.setCurrentIndex(0)
+    assert isinstance(window.device_combo.currentData(), CaptureCard)
     window.show()
     return window
 
@@ -119,16 +122,29 @@ def find_route(window) -> None:
         raise RuntimeError(f"Find did not run: {window.find_result.text()!r}")
 
 
-def render_setup(r: Renderer) -> None:
+def render_setup(r: Renderer, connect_only: bool = False) -> None:
     w = r.window
-    r.shoot("start-empty")
+    if not connect_only:
+        r.shoot("start-empty")
     w._start_new_capture()
     w.pedal_name.setText("Klon-style drive")
     w.pedal_name.editingFinished.emit()
-    r.shoot("gear")
+    if not connect_only:
+        r.shoot("gear")
     w.gear_next_button.click()
     r.shoot("connect-not-ready")
+    original = list(w._render_devices)
+    w._render_devices[:] = [*original, DeviceInfo(2, "USB Audio CODEC", "Core Audio", 0, 2, 48000),
+                           DeviceInfo(3, "USB Audio CODEC", "Core Audio", 2, 0, 48000)]
+    w._refresh_devices()
+    w.device_combo.setCurrentIndex(1)
+    r.shoot("connect-split")
     w.wire_check.setChecked(True)
+    find_route(w)
+    r.shoot("connect-split-found")
+    w._render_devices[:] = original
+    w._refresh_devices()
+    w.device_combo.setCurrentIndex(0)
     find_route(w)
     w._on_route_test_success(ROUTE_OK)
     r.shoot("connect-ready")
@@ -182,15 +198,17 @@ def render_train_and_listen(r: Renderer, inputs: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=ROOT / "docs" / "screenshots" / "native")
+    parser.add_argument("--connect-only", action="store_true")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     app = QApplication([])
     inputs = synthetic_inputs()
     renderer = Renderer(app, build_window(inputs), args.out)
-    render_setup(renderer)
-    render_record(renderer, inputs)
-    render_train_and_listen(renderer, inputs)
-    (args.out / "evidence.json").write_text(json.dumps({"files": renderer.files, "audio_recorded": False,
+    render_setup(renderer, args.connect_only)
+    if not args.connect_only:
+        render_record(renderer, inputs)
+        render_train_and_listen(renderer, inputs)
+    (args.out / ("connect-evidence.json" if args.connect_only else "evidence.json")).write_text(json.dumps({"files": renderer.files, "audio_recorded": False,
                                                         "model_trained": False}, indent=2))
     print(f"{len(renderer.files)} screenshots in {args.out}")
     return 0
