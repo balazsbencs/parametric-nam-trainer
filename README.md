@@ -223,7 +223,68 @@ select it in Review, and choose **Qualify saved run**. CLI equivalents:
 ```
 
 The protected conversion currently supports single-array concat networks without
-an existing post-stack head, FiLM routes, grouped input mixers, or analog input-level
+an existing post-stack head, FiLM routes, grouped input mixers, or unverified analog input-level
 metadata. **FiLM training remains available, but protected FiLM export is blocked**
 until its protection path is implemented. Select concat for a protected export.
 Do not distribute raw exports to bypass this gate.
+
+### Recorded input reference and transient fine-tuning
+
+Playback calibration now uses `input_reference.json` when present. Use **Record input reference…** in Train or the CLI to record known
+levels once; the input WAV hashes bind the reference to those recordings. The
+Train page displays the derived fixed pad and prevents accidental manual changes.
+A conflicting CLI override or replaced input file fails preflight. No automatic
+gain riding or peak-based calibration is applied.
+
+```sh
+# Teacher inputs were generated at -12 dB; playback is in the original source domain.
+.venv/bin/parametric input-reference PROJECT --kind digital --capture -12 --playback 0
+# Or measured full-scale references: capture 0 dBFS = +18 dBu; playback ADC = +12 dBu.
+.venv/bin/parametric input-reference PROJECT --kind analog --capture 18 --playback 12
+```
+
+Digital mapping: pad = playback gain − capture gain. Analog mapping: pad = capture
+full-scale reference − playback full-scale reference. These are alternative
+coordinate descriptions; do not add both. Hardware gain controls must stay at
+the measured positions. Unsupported boosts and pads above 30 dB are rejected.
+Analog input metadata on a NAM must agree with the recorded capture reference.
+
+Use **Choose raw model for fine-tuning…** in Train or pass `--warm-start RAW.nam`.
+Choose its matching architecture and controls. **Train from scratch** clears the
+selection. A packaged `fine_tune.json` may select a project-relative raw model.
+Fine-tuning retains the original recordings, loads the original uncalibrated
+weights, uses raw target units without joint output normalization, and caps the
+learning rate at 1e-4. The source NAM and its SHA256 are saved in the run. Optimizer
+checkpoint resume retains its restored state rather than reloading initial weights.
+
+`augmentation.json` (version 1, `train`/`validation` arrays of normal dataset entries)
+adds teacher-rendered attacks after capture config regeneration. Example renderer:
+
+```sh
+python -m parametric_mac.teacher_examples PROJECT --sources sources.json \
+  --renderer /path/to/pedal-nam-render --input-pad-db 12
+```
+
+Each source record has `id`, `path` (teacher NAM), `params`, and `split` (`train` or
+`validation`). This generates attacks at playback peaks 0.1–0.95, with impulses,
+noise bursts of 1–1024 samples and harmonic plucks. Seeds differ between training,
+epoch validation and final qualification. Teacher weights remain on the render
+machine; portable training packages need only the WAV inputs and targets.
+
+**A protected export now also requires `transient_validation.json`.** It uses
+version 1 with a `validation` array (and optional `common`) of reserved, aligned
+attack recordings, in the same capture input domain as normal audio. It can use
+teacher responses or physical recordings. Input and target files must be separate
+from fitting and epoch-validation files; their hashes are saved and rechecked.
+Keep a silent pre-roll and the full recovery tail. No attack is trimmed by the
+qualification scorer. All reserved captures must meet ESR ≤0.25, maximum error
+≤0.35, worst 20 ms error RMS ≤0.10 and no excess ceiling plateau longer than
+48 samples (1 ms). The reference must contain a non-silent response. Existing
+runs without reserved captures retain raw exports but cannot publish a protected
+playback NAM. A bounded output alone no longer qualifies as a good transient.
+
+The same frozen trainer and qualification code can run headlessly on CUDA. See
+[cloud/runpod/README.md](cloud/runpod/README.md) for package construction,
+benchmarking, checkpoint resume and qualified collection, and
+[docs/transient-validation.md](docs/transient-validation.md) for the Bassman
+regression evidence and remaining validation limits.

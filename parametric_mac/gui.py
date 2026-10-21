@@ -1,5 +1,6 @@
 """Five-stage desktop workflow over the pinned NAM capture engine."""
 from pathlib import Path
+from .checks import read_json
 import hashlib
 import json
 import math
@@ -11,7 +12,7 @@ import sys
 from PySide6.QtCore import Qt, QProcess, QProcessEnvironment, QTimer, QUrl, QRectF, QPointF, QSize
 from PySide6.QtGui import QDesktopServices, QPainter, QPen, QColor, QPalette, QFont
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
+    QApplication, QDialog, QDialogButtonBox, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
     QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QPlainTextEdit, QMessageBox, QStackedWidget,
     QScrollArea, QSlider, QCheckBox, QLineEdit, QFileDialog, QTableWidgetItem,
     QProgressBar, QSizePolicy, QBoxLayout, QLayout, QToolButton, QButtonGroup, QStyleOptionSlider, QStyle,
@@ -767,10 +768,21 @@ class MacWindow(MainWindow):
         mapping = QFormLayout()
         mapping.addRow("Playback input attenuation", self.playback_pad)
         layout.addLayout(mapping)
-        layout.addWidget(label("Use 0 dB when playback and capture use the same digital input scale. "
-                               "Use 12 dB for the prepared Bassman teacher dataset. This changes model drive; "
-                               "do not infer it from the recording peak. Protected playback currently supports concat models.", "muted"))
+        self.mapping_hint = label("Record the capture and playback reference levels to derive a fixed input pad automatically. "
+                                  "For older projects, confirm the known mapping below. Recording peaks cannot determine it.", "muted")
+        layout.addWidget(self.mapping_hint)
+        self.record_reference_button = button("Record input reference…", self._record_input_reference)
+        layout.addWidget(self.record_reference_button, alignment=Qt.AlignLeft)
         layout.addWidget(self.playback_confirm)
+        self.warm_start_button = button("Choose raw model for fine-tuning…", self._choose_warm_start)
+        self.warm_start_hint = label("Starts a new model unless a raw NAM is selected. Original recordings stay in training.", "muted")
+        warm_actions = QHBoxLayout()
+        warm_actions.addWidget(self.warm_start_button)
+        self.clear_warm_start_button = button("Train from scratch", self._clear_warm_start)
+        warm_actions.addWidget(self.clear_warm_start_button)
+        warm_actions.addStretch()
+        layout.addLayout(warm_actions)
+        layout.addWidget(self.warm_start_hint)
         advanced = QWidget()
         form = QFormLayout(advanced)
         self.device = QComboBox()
@@ -904,6 +916,64 @@ class MacWindow(MainWindow):
                                                      "input_pad_db": self.playback_pad.value()}
             write_state(self.project_dir, self._workflow)
             self._sync_states()
+
+    def _record_input_reference(self):
+        if not self.project_dir or self._busy():
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Record input reference")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(label("Enter known capture/playback levels. Audio peaks cannot measure this reference. "
+                               "Keep interface gain controls at their calibrated positions."))
+        kind = QComboBox()
+        kind.addItem("Digital signal gains (dB)", 'digital')
+        kind.addItem("Measured analog full-scale levels (dBu)", 'analog')
+        layout.addWidget(kind)
+        form = QFormLayout()
+        capture, playback = QDoubleSpinBox(), QDoubleSpinBox()
+        for field in (capture, playback):
+            field.setRange(-120, 60)
+            field.setDecimals(2)
+        form.addRow("Capture signal gain", capture)
+        form.addRow("Playback signal gain", playback)
+        layout.addLayout(form)
+        def labels():
+            analog = kind.currentData() == 'analog'
+            form.labelForField(capture).setText("Capture 0 dBFS reference" if analog else "Capture signal gain")
+            form.labelForField(playback).setText("Playback ADC 0 dBFS reference" if analog else "Playback signal gain")
+            for field in (capture, playback):
+                field.setSuffix(" dBu" if analog else " dB")
+        kind.currentIndexChanged.connect(labels)
+        labels()
+        actions = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        actions.accepted.connect(dialog.accept)
+        actions.rejected.connect(dialog.reject)
+        layout.addWidget(actions)
+        if dialog.exec() == QDialog.Accepted:
+            try:
+                from .input_reference import record_reference
+                from .transients import project_data
+                from nam.capture.export import build_data_config
+                record_reference(self.project_dir, project_data(self.project_dir, build_data_config(self.project)),
+                                 kind=kind.currentData(), capture=capture.value(), playback=playback.value())
+                self._open_project(self.project_dir)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                QMessageBox.warning(self, "Could not record input reference", str(exc))
+
+    def _clear_warm_start(self):
+        if self.project_dir and not self._busy():
+            self._workflow['warm_start_path'] = None
+            write_state(self.project_dir, self._workflow)
+            self.warm_start_hint.setText("Starts a new model. Original recordings stay in training.")
+
+    def _choose_warm_start(self):
+        if not self.project_dir or self._busy():
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Choose matching raw training export", str(self.project_dir), "NAM model (*.nam)")
+        if path:
+            self._workflow['warm_start_path'] = path
+            write_state(self.project_dir, self._workflow)
+            self.warm_start_hint.setText("Fine-tuning from " + Path(path).name + ". Select its matching architecture below.")
 
     def _plan_locked(self):
         # Sticky once any take was accepted, including if a file goes missing later.
@@ -1132,6 +1202,24 @@ class MacWindow(MainWindow):
                 or not isinstance(mapping.get("input_pad_db", 0), (int, float))
                 or not math.isfinite(mapping.get("input_pad_db", 0)) or not 0 <= mapping.get("input_pad_db", 0) <= 30):
             mapping = {}
+        self._recorded_reference = (self.project_dir / 'input_reference.json').exists()
+        if self._recorded_reference:
+            try:
+                from .input_reference import resolve_reference
+                from .transients import project_data
+                from nam.capture.export import build_data_config
+                mapping = resolve_reference(self.project_dir, project_data(self.project_dir, build_data_config(project)))
+                self.mapping_hint.setText(f"Recorded input reference: fixed {mapping['input_pad_db']:g} dB attenuation, applied automatically. Picking dynamics are preserved.")
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                mapping = {}
+                self.mapping_hint.setText("Input reference needs updating: " + str(exc))
+        else:
+            self.mapping_hint.setText("No recorded input reference. Confirm the known playback attenuation; do not infer it from audio peaks.")
+        configured = self._workflow.get('warm_start_path')
+        recipe = self.project_dir / 'fine_tune.json'
+        if 'warm_start_path' not in self._workflow and recipe.exists():
+            configured = read_json(recipe).get('source')
+        self.warm_start_hint.setText("Fine-tuning from " + Path(configured).name + ". Select the matching architecture." if configured else "Starts a new model unless a raw NAM is selected. Original recordings stay in training.")
         self.playback_pad.setValue(mapping.get("input_pad_db", 0))
         self.playback_confirm.setChecked(mapping.get("confirmed") is True)
         architecture_index = self.model_architecture.findData(self._workflow.get("model_architecture", "auto"))
@@ -1350,8 +1438,11 @@ class MacWindow(MainWindow):
         self.capture_continue.setEnabled(complete)
         self.check_button.setEnabled(not busy and self.project_dir is not None)
         self.model_architecture.setEnabled(not busy)
-        self.playback_pad.setEnabled(not busy)
-        self.playback_confirm.setEnabled(not busy)
+        self.record_reference_button.setEnabled(not busy and bool(self.project_dir))
+        self.warm_start_button.setEnabled(not busy and bool(self.project_dir))
+        self.clear_warm_start_button.setEnabled(not busy and bool(self.project_dir))
+        self.playback_pad.setEnabled(not busy and not getattr(self, '_recorded_reference', False))
+        self.playback_confirm.setEnabled(not busy and not getattr(self, "_recorded_reference", False))
         self.qualify_button.setEnabled(not busy and bool(self.run_combo.currentData()) and self.playback_confirm.isChecked())
         # Legacy config-only projects may be checked/trained without a capture manifest.
         self.train_button.setEnabled(not busy and (complete or (self.project is None and self.project_dir is not None)))
@@ -1522,7 +1613,7 @@ class MacWindow(MainWindow):
         qualification = self._run_json(run / "playback", "qualification.json") if run else {}
         self.qualification_status.setText("Playback checks passed. Listening and pedal timing still need assessment." if exported else
             qualification.get("error", "Raw exports remain in the run folder. Confirm input mapping in Train, then qualify this run.") +
-            (" Re-qualify the run if its model file was changed." if qualification.get("passed") else ""))
+            (" Re-qualify with the current attack checks before saving." if qualification.get("passed") else ""))
         metrics = self._run_json(run, "metrics.json") if run else {}
         esr = metrics.get("ESR")
         if isinstance(metrics.get("tiers"), dict):

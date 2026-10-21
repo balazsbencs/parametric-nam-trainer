@@ -1,0 +1,14 @@
+# PyTorch comes from the Runpod CUDA template. Never replace it with a CPU wheel.
+pytorch-lightning==2.6.1
+torchmetrics==1.9.0
+numpy>=1.26,<3
+soundfile>=0.12,<1
+librosa>=0.10,<2
+matplotlib>=3.8,<4
+pydantic>=2,<3
+scipy>=1.11,<2
+sounddevice>=0.4,<1
+tensorboard>=2.16,<3
+transformers>=4,<6
+tqdm>=4.66,<5
+wavio>=0.0.5,<1

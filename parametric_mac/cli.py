@@ -79,6 +79,12 @@ def main(argv=None):
     train.add_argument("--dry-run", action="store_true")
     train.add_argument("--input-pad-db", type=float, help="Confirm playback-to-capture input attenuation (0–30 dB); use 12 only for a dataset captured in that digital domain")
     train.add_argument("--architecture", choices=tuple(ARCHITECTURES), help="a2-* uses concat; film-* uses FiLM (continuous controls only); *-dual trains Standard + Nano into one file; auto preserves the recipe")
+    train.add_argument('--warm-start', type=Path, help='Fine-tune a matching raw NAM while retaining original recording units')
+    reference = sub.add_parser('input-reference', help='Record measured digital gains or analog full-scale levels for automatic fixed playback calibration')
+    reference.add_argument('project', type=Path)
+    reference.add_argument('--kind', choices=('digital', 'analog'), default='digital')
+    reference.add_argument('--capture', type=float, required=True, help='Recorded signal gain in dB, or capture full-scale reference in dBu')
+    reference.add_argument('--playback', type=float, required=True, help='Playback signal gain in dB, or ADC full-scale reference in dBu')
     qualify = sub.add_parser("qualify", help="Calibrate and qualify an existing saved run without retraining")
     qualify.add_argument("run", type=Path)
     qualify.add_argument("--input-pad-db", type=float, help="Explicit playback input mapping for this saved run")
@@ -97,7 +103,15 @@ def main(argv=None):
             return 0 if report.ok else 1
         elif args.command == "train":
             from .training import run_training
-            run_training(args.project, args.device, args.epochs, args.batch, args.dry_run, args.architecture, args.input_pad_db)
+            run_training(args.project, args.device, args.epochs, args.batch, args.dry_run, args.architecture, args.input_pad_db, args.warm_start)
+        elif args.command == 'input-reference':
+            from .input_reference import record_reference, resolve_reference
+            from .transients import project_data
+            from .checks import read_json
+            data, _ = project_configs(args.project)
+            data = project_data(args.project, data or read_json(args.project / 'data.json'))
+            record_reference(args.project, data, kind=args.kind, capture=args.capture, playback=args.playback)
+            print(f"Recorded fixed playback attenuation: {resolve_reference(args.project, data)['input_pad_db']:g} dB")
         elif args.command == "qualify":
             from .playback import qualify_run
             return 0 if qualify_run(args.run, args.input_pad_db)["passed"] else 1
