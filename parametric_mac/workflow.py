@@ -25,6 +25,17 @@ QUALITIES = (
 )
 
 
+RECOMMENDED_LEVEL = 2  # "Good"
+# The three levels on the Record page: (card title, index into QUALITIES). Decent (1) and Overkill (4) are Expert.
+MAIN_LEVELS: tuple[tuple[str, int], ...] = (("Fast", 0), ("Good", 2), ("Max", 3))
+_MAIN_NAMES = {index: name for name, index in MAIN_LEVELS}
+
+
+def level_label(index: int) -> str:
+    """The name the Record page shows for a stored quality index."""
+    return _MAIN_NAMES.get(index, QUALITIES[index].name)
+
+
 def quality_settings(knobs, level):
     quality = QUALITIES[level]
     all_controls = knobs
@@ -74,6 +85,15 @@ def recording_minutes(project, train_seconds=38, test_seconds=7):
     # Estimate includes ten seconds to set physical knobs, not ML training time.
     return math.ceil(sum((train_seconds if e.split == "train" else test_seconds) + 10
                          for e in project.entries) / 60)
+
+
+def take_needs_recording(entry):
+    """A saved clipped WAV still needs replacing; advisory QA warnings may be kept."""
+    return entry.status == "pending" or bool(entry.qa and entry.qa.clipping)
+
+
+def takes_to_record(project):
+    return [entry for entry in project.entries if take_needs_recording(entry)] if project else []
 
 
 def read_state(directory):

@@ -1,13 +1,19 @@
-"""Direct manipulation of physical controls; numeric codes stay out of the UI."""
+"""Direct manipulation of physical controls as tiles; numeric codes stay out of the UI."""
+import math
 from dataclasses import replace
-from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QLabel, QScrollArea, QDialog, QFormLayout, QDoubleSpinBox, QCheckBox,
-    QPlainTextEdit, QDialogButtonBox, QMessageBox, QLayout)
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QFrame,
+                               QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPlainTextEdit,
+                               QPushButton, QScrollArea, QVBoxLayout, QWidget)
 from nam.capture.params import KnobSpec, validate_knobs
+
 from .controls import SwitchSpec
-from .theme import icon
-from PySide6.QtCore import QSize
+from .ui.widgets.knobs import ControlGlyph
+
+MAX_CONTROLS = 24
+TILE_WIDTH, TILE_HEIGHT, TILE_GAP = 118, 140, 10
+VISIBLE_ROWS = 3
 
 
 def starter(amp=False):
@@ -19,79 +25,133 @@ def starter(amp=False):
     return tuple(controls)
 
 
+def is_untouched_starter(controls: tuple) -> bool:
+    """True when `controls` is exactly the pedal or the amp starter."""
+    return tuple(controls) in (starter(False), starter(True))
+
+
+def swap_starter(controls: tuple, amp: bool) -> tuple:
+    """The other gear type's starter, but only if the user has not changed the list."""
+    return starter(amp) if is_untouched_starter(controls) else controls
+
+
+def _range_text(control) -> str:
+    if isinstance(control, SwitchSpec):
+        text = ' / '.join(control.enum_names)
+        return text if len(text) <= 14 else f'{len(control.enum_names)} positions'
+    return f'{control.min:g} – {control.max:g}'
+
+
+class ControlTile(QFrame):
+    """One knob or switch: glyph, editable name, range button and a remove button."""
+
+    def __init__(self, editor, index: int, control):
+        super().__init__()
+        self.setProperty('card', True)
+        self.setFixedSize(TILE_WIDTH, TILE_HEIGHT)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 8)
+        layout.setSpacing(4)
+        top = QHBoxLayout()
+        top.addStretch()
+        remove = QPushButton('×')
+        remove.setProperty('quiet', True)
+        remove.setFixedSize(22, 22)
+        remove.setAccessibleName(f'Remove {control.name}')
+        remove.clicked.connect(lambda checked=False: editor.remove(index))
+        top.addWidget(remove)
+        layout.addLayout(top)
+        self.glyph = ControlGlyph(isinstance(control, SwitchSpec))
+        layout.addWidget(self.glyph, 0, Qt.AlignHCenter)
+        name = QLineEdit(control.name)
+        name.setAlignment(Qt.AlignCenter)
+        name.setMinimumHeight(34)
+        name.setAccessibleName(f'Control {index + 1} name')
+        name.editingFinished.connect(lambda field=name: editor.rename(index, field))
+        layout.addWidget(name)
+        settings = QPushButton(_range_text(control).replace('&', '&&'))
+        settings.setProperty('link', True)
+        settings.setToolTip('Edit switch positions' if isinstance(control, SwitchSpec) else 'Edit dial range and gain role')
+        settings.setAccessibleName(f'{control.name} settings')
+        settings.clicked.connect(lambda checked=False: editor.edit(index))
+        layout.addWidget(settings, 0, Qt.AlignHCenter)
+
+
 class ControlEditor(QWidget):
     changed = Signal()
 
-    def __init__(self):
+    def __init__(self, appearance=None):
         super().__init__()
+        self.appearance = appearance
         self.controls = starter()
-        self.box = QVBoxLayout(self)
-        self.box.setContentsMargins(0, 0, 0, 0)
-        self.box.setSpacing(8)
+        box = QVBoxLayout(self)
+        box.setContentsMargins(0, 0, 0, 0)
         self.rows = QWidget()
-        self.rows.setStyleSheet("background: #ffffff;")
-        self.rows_layout = QVBoxLayout(self.rows)
-        self.rows_layout.setContentsMargins(0, 0, 0, 0)
-        self.rows_layout.setSpacing(6)
-        self.rows_layout.setSizeConstraint(QLayout.SetMinimumSize)
-        scroll = QScrollArea()
-        self.scroll = scroll
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.NoFrame)
-        scroll.setWidget(self.rows)
-        scroll.setMinimumHeight(92)
-        scroll.setMaximumHeight(292)
-        self.box.addWidget(scroll)
-        buttons = QHBoxLayout()
-        self.add_knob = QPushButton('Add knob')
-        self.add_switch = QPushButton('Add switch')
-        for action in (self.add_knob, self.add_switch):
-            action.setIcon(icon('plus'))
-            action.setIconSize(QSize(14, 14))
-            action.setProperty('quiet', True)
-        self.add_knob.clicked.connect(lambda: self.add_control(False))
-        self.add_switch.clicked.connect(lambda: self.add_control(True))
-        buttons.addWidget(self.add_knob)
-        buttons.addWidget(self.add_switch)
-        buttons.addStretch()
-        self.box.addLayout(buttons)
+        self.rows.setObjectName('tiles')
+        self.grid = QGridLayout(self.rows)
+        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setSpacing(TILE_GAP)
+        self.grid.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QScrollArea.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setWidget(self.rows)
+        box.addWidget(self.scroll)
+        self.add_knob = self._add_tile('+ Knob', False)
+        self.add_switch = self._add_tile('+ Switch', True)
+        self._tiles: list[QWidget] = []
+        if appearance is not None:
+            appearance.changed.connect(self._set_palette)
         self.set_controls(self.controls)
+
+    def _set_palette(self, palette) -> None:
+        for tile in self._tiles:
+            tile.glyph.set_palette(palette)
+
+    def _add_tile(self, text: str, switch: bool) -> QPushButton:
+        tile = QPushButton(text)
+        tile.setProperty('addTile', True)
+        tile.setFixedSize(TILE_WIDTH, TILE_HEIGHT)
+        tile.clicked.connect(lambda checked=False: self.add_control(switch))
+        return tile
 
     def set_controls(self, controls):
         self.controls = tuple(controls)
-        self.scroll.setFixedHeight(min(292, max(92, len(controls)*42 + max(0, len(controls)-1)*6)))
-        self.setFixedHeight(self.scroll.height() + 48)
-        while self.rows_layout.count():
-            item = self.rows_layout.takeAt(0)
-            widget = item.widget()
-            widget.hide()
-            widget.setParent(None)
-            widget.deleteLater()
-        for i, c in enumerate(self.controls):
-            row = QWidget()
-            row.setFixedHeight(42)
-            layout = QHBoxLayout(row)
-            layout.setContentsMargins(0, 0, 0, 0)
-            name = QLineEdit(c.name)
-            name.setMinimumWidth(80)
-            name.setAccessibleName(f'Control {i+1} name')
-            name.editingFinished.connect(lambda index=i, field=name: self.rename(index, field))
-            positions = ' / '.join(c.enum_names) if isinstance(c, SwitchSpec) else f'{c.min:g}–{c.max:g}'
-            settings = QPushButton((positions if len(positions) <= 20 else f'{len(c.enum_names)} positions').replace('&', '&&'))
-            settings.setToolTip('Edit switch positions' if isinstance(c, SwitchSpec) else 'Edit dial range and gain role')
-            settings.setAccessibleName(f'{c.name} settings')
-            settings.clicked.connect(lambda checked=False, index=i: self.edit(index))
-            remove = QPushButton('Remove')
-            remove.setProperty('quiet', True)
-            remove.setAccessibleName(f'Remove {c.name}')
-            remove.clicked.connect(lambda checked=False, index=i: self.remove(index))
-            layout.addWidget(name, 1)
-            layout.addWidget(settings)
-            layout.addWidget(remove)
-            self.rows_layout.addWidget(row)
+        for tile in getattr(self, '_tiles', []):
+            self.grid.removeWidget(tile)
+            tile.hide()
+            tile.deleteLater()
+        self._tiles = [ControlTile(self, i, c) for i, c in enumerate(self.controls)]
+        if self.appearance is not None:
+            self._set_palette(self.appearance.palette())
+        self.add_knob.setEnabled(len(self.controls) < MAX_CONTROLS)
+        self.add_switch.setEnabled(len(self.controls) < MAX_CONTROLS)
+        self._reflow()
 
-        self.add_knob.setEnabled(len(controls) < 24)
-        self.add_switch.setEnabled(len(controls) < 24)
+    def _columns(self) -> int:
+        width = self.scroll.viewport().width() or self.width()
+        return max(1, (width + TILE_GAP) // (TILE_WIDTH + TILE_GAP))
+
+    def _reflow(self) -> None:
+        items = [*self._tiles, self.add_knob, self.add_switch]
+        for widget in items:
+            self.grid.removeWidget(widget)
+        columns = self._columns()
+        for position, widget in enumerate(items):
+            row, column = divmod(position, columns)
+            self.grid.addWidget(widget, row, column)
+            widget.show()
+        rows = math.ceil(len(items) / columns)
+        visible = min(rows, VISIBLE_ROWS)
+        self.scroll.setFixedHeight(visible * TILE_HEIGHT + (visible - 1) * TILE_GAP + 2)
+        self.setFixedHeight(self.scroll.height())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._columns() != getattr(self, '_last_columns', None):
+            self._last_columns = self._columns()
+            self._reflow()
 
     def commit(self, controls):
         validate_knobs(controls)
@@ -110,7 +170,7 @@ class ControlEditor(QWidget):
             QMessageBox.warning(self, 'Choose a unique control name', str(exc))
 
     def add_control(self, switch=False):
-        if len(self.controls) >= 24:
+        if len(self.controls) >= MAX_CONTROLS:
             return
         base = 'Switch' if switch else 'Knob'
         names = {c.name.casefold() for c in self.controls}
@@ -156,7 +216,7 @@ class ControlEditor(QWidget):
             layout.addLayout(form)
         error = QLabel()
         error.setWordWrap(True)
-        error.setStyleSheet('color: #925517')
+        error.setProperty('role', 'warn')
         layout.addWidget(error)
         actions = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         actions.rejected.connect(dialog.reject)

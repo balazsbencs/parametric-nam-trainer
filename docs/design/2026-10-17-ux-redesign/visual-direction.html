@@ -1,0 +1,260 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  .vd * { box-sizing: border-box; }
+  .vd { font-family: 'Geist', -apple-system, system-ui, sans-serif; }
+  .vd .num { font-family: 'Geist Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .vd .stack { display: grid; gap: 28px; }
+  .vd .win { width: 100%; max-width: 980px; aspect-ratio: 16/10; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  .vd .steps { display: flex; gap: 6px; padding: 14px 22px; align-items: center; font-size: 13px; }
+  .vd .steps .s { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; }
+  .vd .steps .dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; }
+  .vd .steps .bar { flex: 0 0 18px; height: 1px; }
+  .vd .body { flex: 1; display: grid; grid-template-columns: 1.35fr 1fr; gap: 0; }
+  .vd .main { padding: 26px 34px; display: flex; flex-direction: column; }
+  .vd .side { padding: 26px 28px; display: flex; flex-direction: column; gap: 14px; }
+  .vd h4 { margin: 0; font-weight: 600; letter-spacing: -0.02em; }
+  .vd .knobs { display: flex; gap: 36px; margin: 18px 0 8px; }
+  .vd .knob { text-align: center; }
+  .vd .knob .lbl { font-size: 12px; text-transform: none; letter-spacing: 0.02em; margin-bottom: 6px; }
+  .vd .knob .val { font-size: 30px; font-weight: 600; margin-top: 4px; letter-spacing: -0.02em; }
+  .vd .rec { margin-top: auto; display: flex; align-items: center; gap: 14px; }
+  .vd .recbtn { border: 0; font: inherit; font-weight: 600; font-size: 16px; padding: 14px 26px; border-radius: 10px; display: flex; align-items: center; gap: 10px; cursor: default; }
+  .vd .recbtn i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .vd .hint { font-size: 12px; }
+  .vd .kbd { padding: 1px 6px; border-radius: 4px; font-size: 11px; }
+  .vd .prog { height: 6px; border-radius: 999px; overflow: hidden; }
+  .vd .prog > div { height: 100%; width: 45%; border-radius: 999px; }
+  .vd .row { display: flex; justify-content: space-between; font-size: 13px; padding: 9px 0; }
+  .vd .tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+  .vd .meter { display: flex; gap: 2px; align-items: flex-end; height: 34px; }
+  .vd .meter span { flex: 1; border-radius: 1px; }
+  .vd .caption { font-size: 13px; margin-top: 10px; }
+  .vd .caption b { font-weight: 600; }
+
+  /* ---------- A: Studio (dark, amber LED) ---------- */
+  .A { background: #17140f; color: #efe9df; box-shadow: 0 24px 60px -20px rgba(40,25,5,.55); background-image: radial-gradient(120% 80% at 20% 0%, #2a2319 0%, #17140f 60%); }
+  .A .steps { border-bottom: 1px solid #2c261d; color: #8d8475; }
+  .A .steps .s.on { background: #2b241a; color: #f4c06a; }
+  .A .steps .s.done { color: #b8ae9c; }
+  .A .steps .dot { background: #2c261d; color: #8d8475; }
+  .A .steps .s.on .dot { background: #f2a93b; color: #1b150c; box-shadow: 0 0 12px #f2a93b88; }
+  .A .steps .s.done .dot { background: #3a3226; color: #d9cfbd; }
+  .A .steps .bar { background: #3a3226; }
+  .A .side { background: #120f0b; border-left: 1px solid #2c261d; }
+  .A .knob .lbl { color: #a99f8e; }
+  .A .muted { color: #8d8475; }
+  .A .recbtn { background: #f2a93b; color: #1b150c; box-shadow: 0 8px 24px -8px #f2a93baa; }
+  .A .recbtn i { background: #b8320f; }
+  .A .kbd { background: #2c261d; color: #d9cfbd; }
+  .A .prog { background: #2c261d; } .A .prog > div { background: linear-gradient(90deg, #c47f1c, #f2a93b); }
+  .A .row { border-bottom: 1px solid #241f17; }
+  .A .tag.ok { background: #1f2a1a; color: #9ccf86; }
+  .A .tag.next { background: #3b2c14; color: #f4c06a; }
+  .A .meter span { background: #3a3226; } .A .meter span.on { background: #9ccf86; } .A .meter span.hot { background: #f2a93b; }
+
+  /* ---------- B: Workbench (light, bold, signal orange) ---------- */
+  .B { background: #f6f3ee; color: #1f1c18; box-shadow: 0 24px 60px -24px rgba(60,40,20,.35); }
+  .B .steps { color: #8a8278; border-bottom: 1px solid #e6e0d6; background: #fbf9f5; }
+  .B .steps .s.on { background: #1f1c18; color: #fff; }
+  .B .steps .s.done { color: #4b453d; }
+  .B .steps .dot { background: #e9e3d9; color: #8a8278; }
+  .B .steps .s.on .dot { background: #ff5b1f; color: #fff; }
+  .B .steps .s.done .dot { background: #d9d2c6; color: #1f1c18; }
+  .B .steps .bar { background: #d9d2c6; }
+  .B .side { background: #efeae2; }
+  .B .knob .lbl { color: #6d655b; }
+  .B .muted { color: #7d756a; }
+  .B .recbtn { background: #ff5b1f; color: #fff; box-shadow: 0 8px 20px -10px #ff5b1fcc; }
+  .B .recbtn i { background: #fff; }
+  .B .kbd { background: #e9e3d9; color: #4b453d; }
+  .B .prog { background: #e3ddd2; } .B .prog > div { background: #1f1c18; }
+  .B .row { border-bottom: 1px solid #e0d9cd; }
+  .B .tag.ok { background: #e2eedb; color: #2f6a1d; }
+  .B .tag.next { background: #ffe1d4; color: #b8380a; }
+  .B .meter span { background: #ddd6ca; } .B .meter span.on { background: #4f8a3a; } .B .meter span.hot { background: #ff5b1f; }
+  .B .pedal { background: #2d5b4f; border-radius: 14px; padding: 18px 24px 22px; display: inline-flex; flex-direction: column; align-items: center; box-shadow: inset 0 1px 0 #ffffff22, 0 10px 24px -12px #1d3a33; width: fit-content; margin-top: 14px; }
+  .B .pedal .knob .lbl { color: #d7e6df; } .B .pedal .knob .val { color: #fff; }
+  .B .pedal .led { width: 8px; height: 8px; border-radius: 50%; background: #ff5b1f; box-shadow: 0 0 10px #ff5b1f; margin-bottom: 4px; }
+  .B .pedal .knobs { margin: 8px 0 0; }
+
+  /* ---------- C: Console (graphite, lime meter) ---------- */
+  .C { background: #101317; color: #e3e8ee; box-shadow: 0 24px 60px -20px rgba(5,15,25,.6); }
+  .C .steps { border-bottom: 1px solid #222830; color: #6f7a87; }
+  .C .steps .s.on { color: #d4ff4f; }
+  .C .steps .s.done { color: #a9b3bf; }
+  .C .steps .dot { border: 1px solid #343c47; color: #6f7a87; }
+  .C .steps .s.on .dot { border-color: #d4ff4f; color: #101317; background: #d4ff4f; }
+  .C .steps .s.done .dot { border-color: #4b5562; color: #a9b3bf; }
+  .C .steps .bar { background: #2a313b; }
+  .C .side { background: #0c0f12; border-left: 1px solid #222830; }
+  .C .knob .lbl { color: #7f8a97; }
+  .C .muted { color: #6f7a87; }
+  .C .recbtn { background: transparent; color: #d4ff4f; border: 1.5px solid #d4ff4f; }
+  .C .recbtn i { background: #ff4d4d; box-shadow: 0 0 10px #ff4d4d; }
+  .C .kbd { background: #1d232b; color: #a9b3bf; }
+  .C .prog { background: #1d232b; } .C .prog > div { background: #d4ff4f; }
+  .C .row { border-bottom: 1px solid #1a1f26; }
+  .C .tag.ok { background: #18251a; color: #8de07a; }
+  .C .tag.next { background: #2a3312; color: #d4ff4f; }
+  .C .meter span { background: #1f262e; } .C .meter span.on { background: #8de07a; } .C .meter span.hot { background: #d4ff4f; }
+  .C .scope { margin-top: 14px; border: 1px solid #222830; border-radius: 8px; height: 70px; background: repeating-linear-gradient(90deg, transparent 0 39px, #1a1f26 39px 40px); position: relative; overflow: hidden; }
+</style>
+
+<div class="vd">
+<h2>Which look feels right for the app?</h2>
+<p class="subtitle">All three show the same screen: recording one knob setting. The steps are the same. Only the style is different. Click the one you like.</p>
+
+<div class="options stack" style="display:grid">
+
+<!-- ================= A ================= -->
+<div class="option" data-choice="studio" onclick="toggleSelect(this)" style="display:block">
+  <div class="letter">A</div>
+  <div class="content">
+    <h3>Studio — dark, warm, like real gear</h3>
+    <p>Dark brown-black surfaces, one amber "LED" color. Feels like a pedal or an amp at night. Exciting, calm on the eyes in a studio.</p>
+  </div>
+  <div class="win A" style="margin-top:14px">
+    <div class="steps">
+      <div class="s done"><span class="dot">✓</span>Set up</div><div class="bar"></div>
+      <div class="s done"><span class="dot">✓</span>Plan</div><div class="bar"></div>
+      <div class="s on"><span class="dot">3</span>Record</div><div class="bar"></div>
+      <div class="s"><span class="dot">4</span>Train</div><div class="bar"></div>
+      <div class="s"><span class="dot">5</span>Listen</div>
+      <div style="margin-left:auto" class="muted">Klon-style drive</div>
+    </div>
+    <div class="body">
+      <div class="main">
+        <div class="muted" style="font-size:13px">Setting <span class="num">19</span> of <span class="num">40</span></div>
+        <h4 style="font-size:28px;margin-top:6px">Turn the knobs to these positions</h4>
+        <div class="knobs">
+          <div class="knob"><div class="lbl">Drive</div>
+            <svg width="96" height="96" viewBox="0 0 96 96"><circle cx="48" cy="48" r="44" fill="none" stroke="#2c261d" stroke-width="3" stroke-dasharray="207 70" transform="rotate(135 48 48)"/><circle cx="48" cy="48" r="44" fill="none" stroke="#f2a93b" stroke-width="3" stroke-dasharray="52 300" transform="rotate(135 48 48)" style="filter:drop-shadow(0 0 4px #f2a93b)"/><circle cx="48" cy="48" r="32" fill="#231d15" stroke="#3a3226"/><line x1="48" y1="48" x2="48" y2="22" stroke="#f4c06a" stroke-width="3" stroke-linecap="round" transform="rotate(-67.5 48 48)"/></svg>
+            <div class="val num">2.5</div></div>
+          <div class="knob"><div class="lbl">Tone</div>
+            <svg width="96" height="96" viewBox="0 0 96 96"><circle cx="48" cy="48" r="44" fill="none" stroke="#2c261d" stroke-width="3" stroke-dasharray="207 70" transform="rotate(135 48 48)"/><circle cx="48" cy="48" r="44" fill="none" stroke="#f2a93b" stroke-width="3" stroke-dasharray="145 300" transform="rotate(135 48 48)" style="filter:drop-shadow(0 0 4px #f2a93b)"/><circle cx="48" cy="48" r="32" fill="#231d15" stroke="#3a3226"/><line x1="48" y1="48" x2="48" y2="22" stroke="#f4c06a" stroke-width="3" stroke-linecap="round" transform="rotate(54 48 48)"/></svg>
+            <div class="val num">7.0</div></div>
+        </div>
+        <div class="muted" style="font-size:13px">Keep Level at 5.</div>
+        <div class="rec"><button class="recbtn"><i></i>Record</button><span class="hint muted">or press <span class="kbd">Space</span></span></div>
+      </div>
+      <div class="side">
+        <div><div class="row" style="border:0;padding:0 0 8px"><span class="muted">Progress</span><span class="num">18 / 40</span></div><div class="prog"><div></div></div><div class="muted" style="font-size:12px;margin-top:8px">About 16 minutes left</div></div>
+        <div style="margin-top:6px">
+          <div class="muted" style="font-size:12px;margin-bottom:4px">Last take</div>
+          <div class="meter"><span class="on" style="height:30%"></span><span class="on" style="height:55%"></span><span class="on" style="height:70%"></span><span class="on" style="height:62%"></span><span class="on" style="height:80%"></span><span class="hot" style="height:88%"></span><span class="on" style="height:66%"></span><span class="on" style="height:48%"></span><span class="on" style="height:72%"></span><span class="on" style="height:58%"></span><span style="height:20%"></span><span style="height:14%"></span></div>
+          <div class="caption"><span class="tag ok">Good take</span> &nbsp;<span class="muted">No clipping · timing OK</span></div>
+        </div>
+        <div style="margin-top:6px">
+          <div class="muted" style="font-size:12px">Up next</div>
+          <div class="row"><span>Drive <span class="num">6.0</span> · Tone <span class="num">3.5</span></span><span class="tag next">20</span></div>
+          <div class="row"><span>Drive <span class="num">4.5</span> · Tone <span class="num">5.0</span></span><span class="muted num">21</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= B ================= -->
+<div class="option" data-choice="workbench" onclick="toggleSelect(this)" style="display:block">
+  <div class="letter">B</div>
+  <div class="content">
+    <h3>Workbench — light, bold, friendly</h3>
+    <p>Warm paper-white background, big black type, one bright orange color. The pedal is drawn as a pedal, with its knobs on it. Feels like a modern hardware brand.</p>
+  </div>
+  <div class="win B" style="margin-top:14px">
+    <div class="steps">
+      <div class="s done"><span class="dot">✓</span>Set up</div><div class="bar"></div>
+      <div class="s done"><span class="dot">✓</span>Plan</div><div class="bar"></div>
+      <div class="s on"><span class="dot">3</span>Record</div><div class="bar"></div>
+      <div class="s"><span class="dot">4</span>Train</div><div class="bar"></div>
+      <div class="s"><span class="dot">5</span>Listen</div>
+      <div style="margin-left:auto" class="muted">Klon-style drive</div>
+    </div>
+    <div class="body">
+      <div class="main">
+        <div class="muted" style="font-size:13px">Setting <span class="num">19</span> of <span class="num">40</span></div>
+        <h4 style="font-size:30px;margin-top:6px;letter-spacing:-0.035em">Set your pedal like this</h4>
+        <div class="pedal">
+          <div class="led"></div>
+          <div class="knobs">
+            <div class="knob"><div class="lbl">Drive</div>
+              <svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="30" fill="#f1ede6" stroke="#0003"/><circle cx="42" cy="42" r="30" fill="url(#gB)"/><line x1="42" y1="42" x2="42" y2="16" stroke="#1f1c18" stroke-width="4" stroke-linecap="round" transform="rotate(-67.5 42 42)"/><defs><radialGradient id="gB" cx="35%" cy="30%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#d9d2c6"/></radialGradient></defs></svg>
+              <div class="val num">2.5</div></div>
+            <div class="knob"><div class="lbl">Tone</div>
+              <svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="30" fill="url(#gB)" stroke="#0003"/><line x1="42" y1="42" x2="42" y2="16" stroke="#1f1c18" stroke-width="4" stroke-linecap="round" transform="rotate(54 42 42)"/></svg>
+              <div class="val num">7.0</div></div>
+            <div class="knob" style="opacity:.55"><div class="lbl">Level</div>
+              <svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="30" fill="url(#gB)" stroke="#0003"/><line x1="42" y1="42" x2="42" y2="16" stroke="#1f1c18" stroke-width="4" stroke-linecap="round" transform="rotate(0 42 42)"/></svg>
+              <div class="val num" style="font-size:16px">fixed 5</div></div>
+          </div>
+        </div>
+        <div class="rec"><button class="recbtn"><i></i>Record</button><span class="hint muted">or press <span class="kbd">Space</span></span></div>
+      </div>
+      <div class="side">
+        <div><div class="row" style="border:0;padding:0 0 8px"><span class="muted">Progress</span><span class="num">18 / 40</span></div><div class="prog"><div></div></div><div class="muted" style="font-size:12px;margin-top:8px">About 16 minutes left</div></div>
+        <div style="margin-top:6px">
+          <div class="muted" style="font-size:12px;margin-bottom:4px">Last take</div>
+          <div class="meter"><span class="on" style="height:30%"></span><span class="on" style="height:55%"></span><span class="on" style="height:70%"></span><span class="on" style="height:62%"></span><span class="on" style="height:80%"></span><span class="hot" style="height:88%"></span><span class="on" style="height:66%"></span><span class="on" style="height:48%"></span><span class="on" style="height:72%"></span><span class="on" style="height:58%"></span><span style="height:20%"></span><span style="height:14%"></span></div>
+          <div class="caption"><span class="tag ok">Good take</span> &nbsp;<span class="muted">No clipping · timing OK</span></div>
+        </div>
+        <div style="margin-top:6px">
+          <div class="muted" style="font-size:12px">Up next</div>
+          <div class="row"><span>Drive <span class="num">6.0</span> · Tone <span class="num">3.5</span></span><span class="tag next">20</span></div>
+          <div class="row"><span>Drive <span class="num">4.5</span> · Tone <span class="num">5.0</span></span><span class="muted num">21</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= C ================= -->
+<div class="option" data-choice="console" onclick="toggleSelect(this)" style="display:block">
+  <div class="letter">C</div>
+  <div class="content">
+    <h3>Console — dark, sharp, technical</h3>
+    <p>Cool graphite surfaces, one lime "meter" color, thin lines. Feels like a recording console or a plugin. More technical, less warm.</p>
+  </div>
+  <div class="win C" style="margin-top:14px">
+    <div class="steps">
+      <div class="s done"><span class="dot">✓</span>Set up</div><div class="bar"></div>
+      <div class="s done"><span class="dot">✓</span>Plan</div><div class="bar"></div>
+      <div class="s on"><span class="dot">3</span>Record</div><div class="bar"></div>
+      <div class="s"><span class="dot">4</span>Train</div><div class="bar"></div>
+      <div class="s"><span class="dot">5</span>Listen</div>
+      <div style="margin-left:auto" class="muted">Klon-style drive</div>
+    </div>
+    <div class="body">
+      <div class="main">
+        <div class="muted num" style="font-size:12px;letter-spacing:.06em">SETTING 19 / 40</div>
+        <h4 style="font-size:26px;margin-top:6px">Turn the knobs to these positions</h4>
+        <div class="knobs">
+          <div class="knob"><div class="lbl">Drive</div>
+            <svg width="96" height="96" viewBox="0 0 96 96"><g transform="rotate(135 48 48)"><circle cx="48" cy="48" r="42" fill="none" stroke="#2a313b" stroke-width="6" stroke-dasharray="1.5 5.1"/></g><circle cx="48" cy="48" r="44" fill="none" stroke="#d4ff4f" stroke-width="2" stroke-dasharray="52 300" transform="rotate(135 48 48)"/><circle cx="48" cy="48" r="30" fill="#171c22" stroke="#2a313b"/><line x1="48" y1="48" x2="48" y2="24" stroke="#e3e8ee" stroke-width="2.5" stroke-linecap="round" transform="rotate(-67.5 48 48)"/></svg>
+            <div class="val num">2.5</div></div>
+          <div class="knob"><div class="lbl">Tone</div>
+            <svg width="96" height="96" viewBox="0 0 96 96"><g transform="rotate(135 48 48)"><circle cx="48" cy="48" r="42" fill="none" stroke="#2a313b" stroke-width="6" stroke-dasharray="1.5 5.1"/></g><circle cx="48" cy="48" r="44" fill="none" stroke="#d4ff4f" stroke-width="2" stroke-dasharray="145 300" transform="rotate(135 48 48)"/><circle cx="48" cy="48" r="30" fill="#171c22" stroke="#2a313b"/><line x1="48" y1="48" x2="48" y2="24" stroke="#e3e8ee" stroke-width="2.5" stroke-linecap="round" transform="rotate(54 48 48)"/></svg>
+            <div class="val num">7.0</div></div>
+        </div>
+        <div class="muted" style="font-size:13px">Keep Level at 5.</div>
+        <div class="rec"><button class="recbtn"><i></i>Record</button><span class="hint muted">or press <span class="kbd">Space</span></span></div>
+      </div>
+      <div class="side">
+        <div><div class="row" style="border:0;padding:0 0 8px"><span class="muted">Progress</span><span class="num">18 / 40</span></div><div class="prog"><div></div></div><div class="muted" style="font-size:12px;margin-top:8px">About 16 minutes left</div></div>
+        <div style="margin-top:6px">
+          <div class="muted" style="font-size:12px;margin-bottom:4px">Last take</div>
+          <div class="meter"><span class="on" style="height:30%"></span><span class="on" style="height:55%"></span><span class="on" style="height:70%"></span><span class="on" style="height:62%"></span><span class="on" style="height:80%"></span><span class="hot" style="height:88%"></span><span class="on" style="height:66%"></span><span class="on" style="height:48%"></span><span class="on" style="height:72%"></span><span class="on" style="height:58%"></span><span style="height:20%"></span><span style="height:14%"></span></div>
+          <div class="caption"><span class="tag ok">Good take</span> &nbsp;<span class="muted">No clipping · timing OK</span></div>
+        </div>
+        <div style="margin-top:6px">
+          <div class="muted" style="font-size:12px">Up next</div>
+          <div class="row"><span>Drive <span class="num">6.0</span> · Tone <span class="num">3.5</span></span><span class="tag next">20</span></div>
+          <div class="row"><span>Drive <span class="num">4.5</span> · Tone <span class="num">5.0</span></span><span class="muted num">21</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>

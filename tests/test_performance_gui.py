@@ -13,18 +13,19 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QProcess
 from PySide6.QtTest import QTest
 from parametric_mac import gui
+from parametric_mac.ui import jobs
 class ShortTune(QProcess):
     def start(self, program, arguments):
         if 'tune' in arguments:
             arguments += ['--batches','1','--max-trials','1','--steps','2','--warmup','1']
         return super().start(program,arguments)
-gui.QProcess=ShortTune
+jobs.QProcess=ShortTune
 app=QApplication([])
 w=gui.MacWindow()
 w.project_dir=Path(sys.argv[1])
 w.model_architecture.setCurrentIndex(w.model_architecture.findData('auto'))
 w.device.setCurrentIndex(w.device.findData('cpu'))
-w.go_to(3)
+w.go_to_step("train")
 w.show()
 w._start('tune')
 assert w.process is not None

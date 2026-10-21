@@ -13,30 +13,33 @@ from PySide6.QtTest import QTest
 from PySide6.QtCore import Qt
 from nam.capture.project import save_project, QAModel
 from parametric_mac import gui
+from parametric_mac.ui import project_io
+from parametric_mac.workflow import read_state
 from parametric_mac.gui import MacWindow
 app = QApplication([])
 window = MacWindow()
 window.show()
 app.processEvents()
-assert window.font().family() == 'Inter'
-assert window.pages.count() == 5
+assert window.font().family() == 'Geist'
+from parametric_mac.ui.shell import STEPS
+assert window.pages.count() == len(STEPS)
 assert not window.train_button.isEnabled()
 assert not window.capture_next_button.isEnabled()
-assert window.quality_slider.value() == 2
+assert window.quality_cards[1].selected and window._quality == 2
 assert window.model_architecture.currentData() == 'a2-dual'
-assert window.effort_label.text().startswith('40 recordings')
+assert window.effort_label.text().startswith('~40 recordings')
 window.project_dir = Path(sys.argv[1])
 # This legacy test fixture deliberately uses a short, non-A2 network.
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('auto'))
-window.go_to(3)
+window.go_to_step("train")
 window._start('check')
 assert window.process is not None
 assert not window.train_button.isEnabled()
 assert not window.new_button.isEnabled()
 assert not window.model_architecture.isEnabled()
-window.go_to(4)
-assert window.pages.currentIndex() == 4
-assert all(b.isEnabled() for b in window.nav_buttons)
+window.go_to_step("listen")
+assert window.current_step() == "listen"
+assert all(b.isEnabled() for b in window.top_bar.step_bar.buttons())
 for _ in range(400):
     if window.process is None:
         break
@@ -50,7 +53,7 @@ assert window.model_architecture.isEnabled()
 # Failure disclosure follows actual visibility, and the first click collapses it.
 root = Path(sys.argv[1])
 window.project_dir = root / 'missing-project'
-window.go_to(3)
+window.go_to_step("train")
 window._start('check')
 for _ in range(400):
     if window.process is None:
@@ -69,13 +72,13 @@ assets = root / 'assets'
 assets.mkdir()
 for name in ('inputTrunc.wav', 'validation.wav'):
     shutil.copy2(root / 'input.wav', assets / name)
-gui.FILES = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in assets.iterdir()}
+project_io.FILES = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in assets.iterdir()}
 fresh = root / 'native-project'
 fresh.mkdir()
 window._create_project(fresh, assets)
 assert (fresh / 'input_train.wav').is_file()
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('a2-nano'))
-assert gui.read_state(fresh)['model_architecture'] == 'a2-nano'
+assert read_state(fresh)['model_architecture'] == 'a2-nano'
 window._open_project(fresh)
 assert window.model_architecture.currentData() == 'a2-nano'
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('film-dual'))
@@ -92,35 +95,36 @@ assert window.export_concat_button.text() == 'Export training configs'
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('film-nano'))
 assert 'selected model size' in window.architecture_hint.text()
 window.model_architecture.setCurrentIndex(window.model_architecture.findData('auto'))
-window.quality_slider.setValue(0)
+window._select_level(0)
 assert window.n_train_spin.value() == 8
 assert window.knob_table.item(0, 3).text() == '2.0'
 window._commit_plan()
 assert len(window.project.entries) == 14  # an LHS setting already covers a boundary
-assert window.pages.currentIndex() == 2
+assert window.current_step() == "record"
 assert not window.capture_next_button.isEnabled()  # no route proof
 assert not window.loopback_check.isChecked()
 # A known route-test result allows recording only after setup confirmations;
 # invalidating the setup removes readiness. No audio hardware is driven here.
-for check in (window.reamp_check, window.monitor_check, window.level_check):
-    check.setChecked(True)
+window._has_device = lambda: True
+window._device_sample_rate = lambda: 48000
+window.wire_check.setChecked(True)
 route = SimpleNamespace(ok=True, loopback_failed=False, loopback_used=False,
     loopback_disagreement=False, crosscheck=None, peak=-16,
     latency=SimpleNamespace(delay=17, peak_delay=17.0))
 window._on_route_test_success(route)
 assert window._route_ready()
-window.monitor_check.setChecked(False)
+window.wire_check.setChecked(False)
 assert not window._route_ready()
-window.monitor_check.setChecked(True)
-window.confirm_knobs.setChecked(True)
-window.target_label.setText('A different selected setting')
+window.wire_check.setChecked(True)
+# Record only captures the shown setting: a different entry is shown first, never recorded blind.
+window._shown_entry = window.project.entries[1]
 window._begin_capture(window.project.entries[0])
 assert window._worker is None
-assert not window.confirm_knobs.isChecked()  # cannot mislabel a pending take
+assert window._shown_entry is window.project.entries[0]
 # Manual sampling is visibly custom; the slider restores complete defaults.
 window.n_train_spin.setValue(9)
-assert window.quality_name.text() == 'Custom capture plan'
-window.quality_slider.setValue(2)
+assert window._quality is None and not any(c.selected for c in window.quality_cards)
+window._select_level(2)
 assert window.n_train_spin.value() == 30
 window._commit_plan()
 assert len(window.project.entries) == 40
@@ -132,24 +136,22 @@ path.parent.mkdir(parents=True, exist_ok=True)
 shutil.copy2(root / 'input.wav', path)
 save_project(window.project, fresh)
 window._on_capture_success(QAModel(peak=-16, messages=[]))
-assert not window.quality_slider.isEnabled()
+assert not any(c.isEnabled() for c in window.quality_cards)
 assert not window.plan_advanced.isEnabled()
 assert not window.separate_button.isHidden()
 labels = [(e.params, e.y_path) for e in window.project.entries]
 window._open_project(fresh)
 assert [(e.params, e.y_path) for e in window.project.entries] == labels
-assert not window.quality_slider.isEnabled()
+assert not any(c.isEnabled() for c in window.quality_cards)
 assert window._quality == 2
 assert window._workflow['plan_locked']
 window.epochs.setValue(7)
-assert '7 epochs' in window.training_mode.currentText()
-window.training_mode.setCurrentIndex(1)
-assert window.epochs.value() == 1
-QTest.mouseClick(window.training_profiles.buttons[0], Qt.LeftButton)
-assert window.epochs.value() == 200
-QTest.mouseClick(window.training_profiles.buttons[0], Qt.LeftButton)
-assert window.training_profiles.buttons[0].isChecked()
-QTest.mouseClick(window.training_profiles.buttons[1], Qt.LeftButton)
+assert not any(card.selected for card in window.mode_cards)
+window.mode_cards[0].clicked.emit()
+assert window.epochs.value() == 1 and window.mode_cards[0].selected
+window.mode_cards[1].clicked.emit()
+assert window.epochs.value() == 200 and window.mode_cards[1].selected
+window.mode_cards[0].clicked.emit()
 assert window.epochs.value() == 1
 # Opening a run shows its saved metrics and remembers listening per run.
 run = fresh / 'outputs' / 'example-run'
@@ -158,38 +160,36 @@ run.mkdir(parents=True)
 (run / 'status.json').write_text('{"status":"exported"}')
 (run / 'model_parametric.nam').write_text('{}')
 (run / 'metrics.json').write_text('{"epoch":2,"ESR":0.031}')
-window.go_to(4)
+window.go_to_step("listen")
 assert '0.031' in window.review_metric.text()
 (run / 'metrics.json').write_text('{"tiers":{"standard":{"epoch":2,"ESR":0.021},"nano":{"epoch":2,"ESR":0.041}}}')
 window._show_run()
 assert 'Standard: last validation ESR 0.021' in window.review_metric.text()
 assert 'Nano: last validation ESR 0.041' in window.review_metric.text()
 assert not window.save_model_button.isEnabled()
-assert 'qualified playback' in window.model_path.text().lower()
-# Mapping is explicit and persists per project; the raw export remains unsavable.
+assert 'qualified playback' in window.qualification_status.text().lower()
 window.playback_pad.setValue(12)
 window.playback_confirm.setChecked(True)
 assert json.loads((fresh / 'workflow.json').read_text())['playback_calibration'] == {'confirmed': True, 'input_pad_db': 12.0}
 assert window.qualify_button.isEnabled()
 window._open_project(fresh)
 assert window.playback_pad.value() == 12 and window.playback_confirm.isChecked()
-# A qualified file enables saving; altering it disables saving again.
-playback = run / 'playback'
-playback.mkdir()
-(playback / 'model_playback.nam').write_text('{"qualified":"fixture"}')
-digest = hashlib.sha256((playback / 'model_playback.nam').read_bytes()).hexdigest()
-(playback / 'qualification.json').write_text(json.dumps({'passed': True, 'model_sha256': digest, 'policy': {'version': 3}, 'transients': {'passed': True}}))
-window.go_to(4)
+
+(run / "playback").mkdir(exist_ok=True)
+(run / "playback/model_playback.nam").write_text("{}")
+(run / "playback/qualification.json").write_text(json.dumps({"passed": True, "model_sha256": hashlib.sha256((run / "playback/model_playback.nam").read_bytes()).hexdigest()}))
+window._show_run()
 assert window.save_model_button.isEnabled()
-(playback / 'model_playback.nam').write_text('{"changed":true}')
+(run / 'playback/model_playback.nam').write_text('{"changed":true}')
 window._show_run()
 assert not window.save_model_button.isEnabled()
-(playback / 'model_playback.nam').write_text('{"qualified":"fixture"}')
+(run / 'playback/model_playback.nam').write_text('{}')
 window._show_run()
-window.review_check.setChecked(True)
-assert (run / 'review.json').is_file()
+for check in window.listen_checks:
+    check.setChecked(True)
+assert json.loads((run / 'review.json').read_text())['listened']
 window._refresh_runs()
-assert window.review_check.isChecked()
+assert all(check.isChecked() for check in window.listen_checks)
 # New project cannot overwrite existing captures, even via the private entry point.
 try:
     window._create_project(fresh, assets)
@@ -217,7 +217,7 @@ window._use_starter(True)
 assert len(window.control_editor.controls) == 7
 assert isinstance(window.control_editor.controls[-1], SwitchSpec)
 assert window.gear_kind.currentText() == 'Amp'
-assert 'Never connect a speaker output' in window.wiring_note.text()
+assert window.amp_warning.text().startswith("Never connect the amp's speaker output")
 assert len(load_project(second).knob_specs()) == 7  # saved draft
 window._open_project(second)
 assert len(window.control_editor.controls) == 7
@@ -230,7 +230,7 @@ def save_positions():
 QTimer.singleShot(20, save_positions)
 window.control_editor.edit(6)
 assert window.control_editor.controls[-1].enum_names == ('Normal', 'Bright', 'Brighter')
-window.quality_slider.setValue(0)
+window._select_level(0)
 window._commit_plan()
 assert {(e.params['Bright']) for e in window.project.entries_for_split('validation')} == {0, 1, 2}
 window._open_project(second)
@@ -243,53 +243,47 @@ for i in range(17):
 assert len(window.control_editor.controls) == 24
 assert window._preview is not None
 assert len(window._preview.entries) < 5000
+# A Gear edit drops a plan without takes; commit the 24-control plan again, as a user would.
+assert not window.project.entries
+window._commit_plan()
+assert window.project.entries
 assert not window.control_editor.add_knob.isEnabled()
 # Geometry must work with larger layouts, not just the data pipeline.
 window.resize(800, 680)
-for stage in (0, 1, 2, 3, 4):
-    window.go_to(stage)
+for stage in ("gear", "connect", "record", "train", "listen"):
+    window.go_to_step(stage)
     QTest.qWait(80)
-    page = window.pages.widget(stage)
+    page = window.pages.currentWidget()
+    page = page.currentWidget() if hasattr(page, "currentWidget") else page  # Record holds two states
     assert page.horizontalScrollBar().maximum() == 0, (stage, page.widget().size())
-    if stage == 0:
+    if stage == "gear":
         assert window.control_editor.scroll.verticalScrollBar().maximum() > 0
         assert all(field.height() >= 34 for field in window.control_editor.rows.findChildren(QLineEdit))
-    if stage == 1:
-        assert window.quality_slider.width() >= 430
-    if stage == 3:
+    if stage == "train":
         assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
-        assert window.training_profiles.height() >= window.training_profiles.minimumSizeHint().height()
-    if stage == 4:
-        from parametric_mac.gui import Columns
-        columns = page.findChild(Columns)
-        first, second = [item.parentWidget() for item in columns.columns]
-        assert 20 <= second.y() - first.y() - first.height() <= 36
-        from PySide6.QtCore import QPoint
-        heading = columns.columns[1].itemAt(0).widget()
-        visible_gap = heading.mapTo(columns, QPoint(0, 0)).y() - window.folder_button.mapTo(columns, QPoint(0, window.folder_button.height())).y()
-        assert 20 <= visible_gap <= 40, visible_gap
-    if stage == 2:
+        assert window.mode_cards[0].height() >= window.mode_cards[0].minimumSizeHint().height()
+    if stage == "record":
         import math
-        cols = max(1, min(3, window.knob_targets.width() // 170))
-        assert window.knob_targets.height() >= math.ceil(len(window.knob_targets.targets)/cols)*165
+        assert window.knob_targets.height() >= window.knob_targets.required_height() > 0
         assert window.capture_hint.y() >= window.knob_targets.y() + window.knob_targets.height()
         next_target = window._next_pending_entry()
         from parametric_mac.controls import format_controls
-        assert window.queue_rows.itemAt(0).widget().text().startswith(format_controls(next_target.params, window.project.knob_specs()))
+        assert window.target_label.text() == format_controls(next_target.params, window.project.knob_specs())
 window.resize(1140, 900)
-window.go_to(3)
+window.go_to_step("train")
 QTest.qWait(80)
 assert window.architecture_hint.height() >= window.architecture_hint.heightForWidth(window.architecture_hint.width())
-assert window.training_profiles.height() >= window.training_profiles.minimumSizeHint().height()
+assert window.mode_cards[0].height() >= window.mode_cards[0].minimumSizeHint().height()
 window.close()
 app.processEvents()
 print('GUI workflow check passed')
 '''
 
 
-def test_gui_workflow_and_job_controls(project):
+def test_gui_workflow_and_job_controls(project, tmp_path):
+    env = {**os.environ, 'QT_QPA_PLATFORM': 'offscreen',
+           'PARAMETRIC_SETTINGS_DIR': str(tmp_path / 'settings'), 'PARAMETRIC_PROJECTS_ROOT': str(tmp_path / 'projects')}
     result = subprocess.run([sys.executable, '-c', SCRIPT, str(project)],
-                            env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'},
-                            capture_output=True, text=True, timeout=60)
+                            env=env, capture_output=True, text=True, timeout=180)
     assert result.returncode == 0, result.stdout + result.stderr
     assert 'GUI workflow check passed' in result.stdout

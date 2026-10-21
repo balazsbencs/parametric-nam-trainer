@@ -39,7 +39,7 @@ def doctor():
         print(sd.query_devices())
     except Exception as exc:
         print(f"Audio device enumeration unavailable: {exc}")
-        print("On Mac, connect the UMC22 and grant microphone access to the launching app.")
+        print("On Mac, connect your sound card and allow microphone access for the app that starts Parametric.")
     return 0 if success else 1
 
 

@@ -1,0 +1,97 @@
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  .fl * { box-sizing: border-box; }
+  .fl { font-family: 'Geist', -apple-system, system-ui, sans-serif; }
+  .fl .num { font-family: 'Geist Mono', ui-monospace, monospace; }
+  .fl .strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 14px; }
+  .fl .strip.nine { grid-template-columns: repeat(9, 1fr); gap: 6px; }
+  .fl .scr { background: #101317; color: #e3e8ee; border: 1px solid #222830; border-radius: 8px; padding: 10px; min-height: 190px; display: flex; flex-direction: column; gap: 7px; font-size: 11px; }
+  .fl .nine .scr { min-height: 170px; padding: 8px; font-size: 10px; }
+  .fl .scr .k { color: #d4ff4f; font-size: 10px; letter-spacing: .06em; }
+  .fl .scr .t { font-weight: 600; font-size: 13px; letter-spacing: -0.01em; line-height: 1.2; }
+  .fl .nine .scr .t { font-size: 11px; }
+  .fl .scr .m { color: #6f7a87; }
+  .fl .f { border: 1px solid #2a313b; border-radius: 5px; padding: 4px 6px; color: #a9b3bf; }
+  .fl .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .fl .chip { background: #1d232b; border-radius: 4px; padding: 2px 6px; color: #e3e8ee; }
+  .fl .chip.add { background: transparent; border: 1px dashed #343c47; color: #6f7a87; }
+  .fl .seg { display: flex; border: 1px solid #2a313b; border-radius: 5px; overflow: hidden; }
+  .fl .seg span { flex: 1; text-align: center; padding: 3px 0; color: #6f7a87; }
+  .fl .seg span.on { background: #d4ff4f; color: #101317; font-weight: 600; }
+  .fl .btn { margin-top: auto; border: 1.5px solid #d4ff4f; color: #d4ff4f; border-radius: 5px; padding: 4px 8px; text-align: center; font-weight: 600; }
+  .fl .ok { color: #8de07a; }
+  .fl .bar { height: 4px; background: #1d232b; border-radius: 9px; overflow: hidden; } .fl .bar i { display: block; height: 100%; background: #d4ff4f; }
+  .fl .knobrow { display: flex; gap: 10px; justify-content: center; }
+  .fl .kn { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #2a313b; position: relative; }
+  .fl .kn::after { content: ''; position: absolute; left: 50%; top: 4px; width: 2px; height: 12px; background: #e3e8ee; transform-origin: 50% 13px; transform: translateX(-50%) rotate(var(--r)); }
+  .fl .lane { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 6px; font-size: 11px; color: #6f7a87; text-align: center; }
+  .fl .group { display: flex; gap: 6px; margin-top: 6px; font-size: 10px; color: #6f7a87; }
+  .fl .group div { text-align: center; border-top: 2px solid #343c47; padding-top: 4px; }
+</style>
+
+<div class="fl">
+<h2>How should the app walk you through the work?</h2>
+<p class="subtitle">Both options do the same work and hide the same expert settings. The difference: how much goes on one screen.</p>
+
+<div class="options">
+
+<div class="option" data-choice="five-pages" onclick="toggleSelect(this)" style="display:block">
+  <div class="letter">A</div>
+  <div class="content">
+    <h3>Five pages, one job each</h3>
+    <p>Gear → Connect → Record → Train → Listen. Each page has one main button. "Plan" is gone: you pick the detail level (3 choices) just before the first take.</p>
+  </div>
+  <div class="strip">
+    <div class="scr"><div class="k num">1 GEAR</div><div class="t">What do you capture?</div>
+      <div class="f">Klon-style drive</div>
+      <div class="seg"><span class="on">Pedal</span><span>Amp</span></div>
+      <div class="m">Knobs to capture</div>
+      <div class="chips"><span class="chip">Drive</span><span class="chip">Tone</span><span class="chip add">+ knob</span><span class="chip add">+ switch</span></div>
+      <div class="m">Keep fixed: Level at 5</div>
+      <div class="btn">Next</div></div>
+    <div class="scr"><div class="k num">2 CONNECT</div><div class="t">Connect your sound card</div>
+      <div class="f">Scarlett 2i2 ▾</div>
+      <div class="f" style="border-color:#d4ff4f;color:#d4ff4f;text-align:center">Find my connection</div>
+      <div class="ok">✓ Found: Output 1 → Input 1</div>
+      <div class="ok">✓ Level OK at loudest setting</div>
+      <div class="btn">Next</div></div>
+    <div class="scr"><div class="k num">3 RECORD</div><div class="t">Set your pedal like this</div>
+      <div class="knobrow"><div class="kn" style="--r:-67deg"></div><div class="kn" style="--r:54deg"></div></div>
+      <div class="m" style="text-align:center">Drive 2.5 · Tone 7.0</div>
+      <div class="bar"><i style="width:45%"></i></div>
+      <div class="m">18 / 40 · 16 min left</div>
+      <div class="btn">● Record</div></div>
+    <div class="scr"><div class="k num">4 TRAIN</div><div class="t">Train your model</div>
+      <div class="seg"><span>Quick test</span><span class="on">Full</span></div>
+      <div class="m">About 25 min on this Mac</div>
+      <div class="m">Expert settings ▸</div>
+      <div class="btn">Start training</div></div>
+    <div class="scr"><div class="k num">5 LISTEN</div><div class="t">Your model is ready</div>
+      <div class="m">klon-drive.nam</div>
+      <div class="m">Check 3 test settings by ear</div>
+      <div class="chips"><span class="chip">☐ 3.0 · 4.5</span><span class="chip">☐ 6.5 · 7.0</span></div>
+      <div class="btn">Save model</div></div>
+  </div>
+</div>
+
+<div class="option" data-choice="guided" onclick="toggleSelect(this)" style="display:block">
+  <div class="letter">B</div>
+  <div class="content">
+    <h3>Guided: one question per screen</h3>
+    <p>Like an installer. Every screen asks one thing, with Back and Next. More screens, but each one is very small. The five steps on top still show where you are.</p>
+  </div>
+  <div class="strip nine">
+    <div class="scr"><div class="k num">GEAR</div><div class="t">What do you capture?</div><div class="seg"><span class="on">Pedal</span><span>Amp</span></div><div class="f">Name</div><div class="btn">Next</div></div>
+    <div class="scr"><div class="k num">GEAR</div><div class="t">Which knobs?</div><div class="chips"><span class="chip">Drive</span><span class="chip">Tone</span><span class="chip add">+</span></div><div class="btn">Next</div></div>
+    <div class="scr"><div class="k num">CONNECT</div><div class="t">Wire it up</div><div class="m">Out → reamp → pedal → In</div><div class="btn">Done</div></div>
+    <div class="scr"><div class="k num">CONNECT</div><div class="t">Sound card</div><div class="f">Scarlett ▾</div><div class="btn">Find</div></div>
+    <div class="scr"><div class="k num">CONNECT</div><div class="t">Check level</div><div class="ok">✓ OK</div><div class="btn">Next</div></div>
+    <div class="scr"><div class="k num">RECORD</div><div class="t">How detailed?</div><div class="seg"><span>Fast</span><span class="on">Good</span><span>Max</span></div><div class="btn">Start</div></div>
+    <div class="scr"><div class="k num">RECORD</div><div class="t">Set knobs</div><div class="knobrow"><div class="kn" style="--r:-67deg;width:26px;height:26px"></div></div><div class="btn">● Rec</div></div>
+    <div class="scr"><div class="k num">TRAIN</div><div class="t">Train</div><div class="seg"><span>Test</span><span class="on">Full</span></div><div class="btn">Start</div></div>
+    <div class="scr"><div class="k num">LISTEN</div><div class="t">Ready</div><div class="m">.nam</div><div class="btn">Save</div></div>
+  </div>
+</div>
+
+</div>
+</div>
