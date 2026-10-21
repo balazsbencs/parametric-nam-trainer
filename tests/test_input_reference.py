@@ -36,3 +36,14 @@ def test_recorded_mapping_includes_pinned_loader_input_gain(project):
     data['train'][0]['input_gain']=6
     with pytest.raises(ValueError,match='different dataset'):
         resolve_reference(project,data)
+
+
+def test_invalid_effective_mapping_preserves_previous_reference(project):
+    data = json.loads((project / 'data.json').read_text())
+    data['common']['input_gain'] = 6.
+    record_reference(project, data, capture=-12, playback=0)
+    before = (project / 'input_reference.json').read_bytes()
+    with pytest.raises(ValueError, match='unsupported boost'):
+        record_reference(project, data, capture=0, playback=0)
+    assert (project / 'input_reference.json').read_bytes() == before
+    assert resolve_reference(project, data)['input_pad_db'] == 6
