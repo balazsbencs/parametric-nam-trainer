@@ -1,5 +1,7 @@
 # Parametric UX mockups
 
+> **Superseded by [`docs/design/2026-10-17-ux-redesign/`](../design/2026-10-17-ux-redesign/) (2026-10-17).** These files are the history of the first design.
+
 Open **overview.html** for the whole journey, or **index.html** for the clickable prototype. Both work directly from a local folder without installing or serving anything.
 
 Five stages: Connect → Plan → Capture → Train → Review. All device state, measurements, capture results and training runs are examples. No physical audio or actual training is accessed. The A/B panel previews an interaction and does not play audio. Handoff download creates a labeled `.example.json`, never a fake trained model.

@@ -97,3 +97,17 @@ def test_display_names_do_not_become_directories_or_oversized_filenames():
     assert len(paths) == len(set(paths))
     assert all(len(path.split('/')) == 2 and len(path.split('/')[1].encode()) <= 220 for path in paths)
     assert list(plan.entries[0].params) == names
+
+
+def test_swap_starter_only_replaces_an_untouched_starter():
+    from dataclasses import replace
+    from parametric_mac.control_editor import is_untouched_starter, starter, swap_starter
+    pedal, amp = starter(False), starter(True)
+    assert is_untouched_starter(pedal) and is_untouched_starter(amp)
+    assert swap_starter(pedal, True) == amp
+    assert swap_starter(amp, False) == pedal
+    changed = pedal + (replace(pedal[1], name="Level"),)
+    assert not is_untouched_starter(changed)
+    assert swap_starter(changed, True) is changed
+    renamed = (replace(pedal[0], name="Gain"), pedal[1])
+    assert swap_starter(renamed, True) is renamed
