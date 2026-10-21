@@ -96,6 +96,8 @@ def scan_outputs(play_record: PlayRecord, sample_rate: int, output_channels: int
         if cancel is not None and cancel():
             raise CaptureCancelled()
         recording = _as_matrix(play_record(playback, sample_rate, output_channel), input_channels)
+        if cancel is not None and cancel():
+            raise CaptureCancelled()
         scan = _scan_one(recording, output_channel, playback, preamble)
         loopbacks.extend(r.input_channel for r in scan.inputs if r.loopback)
         heard_anything = heard_anything or any(r.peak_dbfs is not None for r in scan.inputs)
@@ -109,6 +111,8 @@ def scan_outputs(play_record: PlayRecord, sample_rate: int, output_channels: int
             break
     if stopped_early and progress is not None:
         progress(1.0)
+    if cancel is not None and cancel():
+        raise CaptureCancelled()
     return summarise(routes, loopbacks, stopped_early, silent=not heard_anything)
 
 
