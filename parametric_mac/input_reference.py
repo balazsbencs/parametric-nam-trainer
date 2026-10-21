@@ -20,6 +20,10 @@ def resolve_reference(directory, data):
     if not path.exists():
         return None
     reference = json.loads(path.read_text())
+    return _resolve_reference(reference, directory, data)
+
+
+def _resolve_reference(reference, directory, data):
     if reference.get('version') != 1:
         raise ValueError('Unsupported input reference version')
     mode = reference.get('kind')
@@ -63,11 +67,8 @@ def record_reference(directory, data, *, kind='digital', capture=0., playback=0.
     reference = {'version': 1, 'kind': kind, **dict(zip(fields[kind], (capture, playback))),
                  'input_sha256': {Path(p).relative_to(directory).as_posix(): digest(p)
                                   for p in sorted(input_paths(data, directory))}}
-    # Validate before replacing a previously recorded reference.
-    first, second = capture, playback
-    pad = second-first if kind == 'digital' else first-second
-    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in (first, second)) or not 0 <= pad <= 30:
-        raise ValueError('Reference must give a finite attenuation between 0 and 30 dB')
+    # Validate the effective mapping, including dataset gains, before replacing a reference.
+    _resolve_reference(reference, directory, data)
     from nam.capture.project import atomic_write_json
     atomic_write_json(directory / 'input_reference.json', reference)
     return reference
