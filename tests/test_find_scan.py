@@ -166,3 +166,19 @@ def test_total_silence_on_every_input_is_reported_as_silent():
     result = scan_outputs(silent, RATE, 2, frozenset())
     assert result.state == "none" and result.silent
     assert not scan_outputs(FakeRig(outputs=2, inputs=2, route=None), RATE, 2, frozenset()).silent
+
+@pytest.mark.parametrize('outputs', [1, 12])
+def test_cancel_after_last_recording_cannot_publish_a_route(outputs):
+    rig = FakeRig(outputs=outputs, inputs=2, route=(1, 1))
+    with pytest.raises(CaptureCancelled):
+        scan_outputs(rig, RATE, outputs, frozenset(), cancel=lambda: bool(rig.played))
+
+
+def test_cancel_from_final_progress_cannot_publish_a_route():
+    cancelled = False
+    def progress(fraction):
+        nonlocal cancelled
+        cancelled = fraction == 1.
+    with pytest.raises(CaptureCancelled):
+        scan_outputs(FakeRig(outputs=1, inputs=2, route=(1, 1)), RATE, 1,
+                     frozenset(), progress=progress, cancel=lambda: cancelled)
