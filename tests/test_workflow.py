@@ -48,6 +48,47 @@ def test_valid_dataset_with_unseen_settings(project):
     assert report.captures == {'train': 3, 'validation': 3}
 
 
+def test_cropped_window_checks_upstream_preceding_silence(project):
+    edit(project, 'data', lambda d: d['common'].update(start_seconds=.025))
+    assert any('input must be silent' in error for error in check_project(project).errors)
+    x, rate = sf.read(project / 'input.wav')
+    x[:1200] = 0
+    sf.write(project / 'input.wav', x, rate, subtype='PCM_24')
+    assert check_project(project).ok
+
+
+def test_config_only_project_can_explicitly_disable_pre_silence(project):
+    edit(project, 'data', lambda d: d['common'].update(start_seconds=.025, require_input_pre_silence=None))
+    assert check_project(project).ok
+
+
+@pytest.mark.parametrize('required_silence', [None, 0, .005, .4])
+def test_cropped_preflight_agrees_with_pinned_loader(project, required_silence):
+    from nam.data import Dataset, XYError
+    from parametric_mac.checks import absolute_data
+
+    edit(project, 'data', lambda d: d['common'].update(
+        start_seconds=.025, require_input_pre_silence=required_silence))
+    data = absolute_data(read_json(project / 'data.json'), project)
+    config = {**data['common'], **data['train'][0], 'nx': 3}
+    config.pop('params')
+    if required_silence:
+        with pytest.raises(XYError, match="isn't silent"):
+            Dataset.init_from_config(config)
+        assert not check_project(project).ok
+        x, rate = sf.read(project / 'input.wav')
+        start = int(.025 * rate)
+        x[max(0, start - int(required_silence * rate)):start] = 0
+        sf.write(project / 'input.wav', x, rate, subtype='PCM_24')
+    dataset = Dataset.init_from_config(config)
+    try:
+        assert len(dataset) > 0
+        report = check_project(project)
+        assert report.ok, report.text()
+    finally:
+        dataset.teardown()
+
+
 def test_rejects_settings_leakage(project):
     edit(project, 'data', lambda d: d['validation'][0]['params'].update(Drive=5))
     assert any('share knob settings' in x for x in check_project(project).errors)
